@@ -1,0 +1,10 @@
+flask>=3.0.0
+flask-limiter>=3.5.0
+flask-wtf>=1.2.0
+python-dotenv>=1.0.0
+psycopg2-binary>=2.9.0
+python-magic>=0.4.27
+openpyxl>=3.1.0
+stripe>=11.0.0
+cryptography>=43.0.0
+gunicorn>=22.0.0
