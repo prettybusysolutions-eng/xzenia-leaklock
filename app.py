@@ -14,6 +14,7 @@ from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from routes.connect import connect_bp
+from routes.stripe_scan import stripe_scan_bp
 
 
 def create_app():
@@ -45,6 +46,7 @@ def create_app():
     app.register_blueprint(checkout_bp)
     app.register_blueprint(webhooks_bp)
     app.register_blueprint(connect_bp)
+    app.register_blueprint(stripe_scan_bp)
     
     # Initialize DB pool
     from models.db import (
