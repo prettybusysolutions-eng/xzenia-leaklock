@@ -55,6 +55,7 @@ def create_app():
         init_scan_emails_table,
         init_connections_table,
         init_scan_cache_table,
+        init_consequence_tables,
     )
     try:
         get_pool()
@@ -62,6 +63,7 @@ def create_app():
         init_scan_emails_table()
         init_connections_table()
         init_scan_cache_table()
+        init_consequence_tables()
     except Exception as e:
         print(f'[WARN] DB pool init failed: {e}')
     

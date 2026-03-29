@@ -225,3 +225,231 @@ def init_scan_cache_table():
     finally:
         if conn:
             pool.putconn(conn)
+
+
+def init_consequence_tables():
+    """Create System 6 consequence-engine tables if they don't exist."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        cur = conn.cursor()
+        cur.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS saas_consequence_cases (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                domain TEXT NOT NULL,
+                source_system TEXT NOT NULL,
+                source_event_id TEXT NOT NULL,
+                scan_id TEXT,
+                customer_ref TEXT,
+                anomaly_type TEXT NOT NULL,
+                evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+                is_synthetic BOOLEAN NOT NULL DEFAULT FALSE,
+                status TEXT NOT NULL DEFAULT 'detected',
+                detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(domain, source_system, source_event_id)
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS saas_consequence_actions (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                case_id UUID NOT NULL REFERENCES saas_consequence_cases(id) ON DELETE CASCADE,
+                recommendation TEXT NOT NULL,
+                causal_hypothesis TEXT,
+                requires_approval BOOLEAN NOT NULL DEFAULT TRUE,
+                approval_status TEXT NOT NULL DEFAULT 'pending',
+                approved_by TEXT,
+                decision_notes TEXT,
+                executed_at TIMESTAMPTZ,
+                execution_status TEXT NOT NULL DEFAULT 'pending',
+                execution_notes TEXT,
+                outcome_type TEXT,
+                outcome_value NUMERIC(12, 2),
+                outcome_currency TEXT DEFAULT 'USD',
+                outcome_notes TEXT,
+                measured_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_cases_domain_detected ON saas_consequence_cases(domain, detected_at DESC)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_cases_synthetic ON saas_consequence_cases(is_synthetic)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_actions_case ON saas_consequence_actions(case_id)")
+        conn.commit()
+        print('[DB] consequence tables ready')
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f'[WARN] Could not init consequence tables: {e}')
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def create_consequence_case(domain, source_system, source_event_id, anomaly_type, evidence, scan_id=None, customer_ref=None, is_synthetic=False):
+    """Create or update a System 6 consequence case and return its id."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO saas_consequence_cases (
+                    domain, source_system, source_event_id, scan_id,
+                    customer_ref, anomaly_type, evidence, is_synthetic
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+                ON CONFLICT (domain, source_system, source_event_id)
+                DO UPDATE SET
+                    scan_id = COALESCE(EXCLUDED.scan_id, saas_consequence_cases.scan_id),
+                    customer_ref = COALESCE(EXCLUDED.customer_ref, saas_consequence_cases.customer_ref),
+                    anomaly_type = EXCLUDED.anomaly_type,
+                    evidence = EXCLUDED.evidence,
+                    is_synthetic = EXCLUDED.is_synthetic,
+                    status = 'detected'
+                RETURNING id::text
+                """,
+                (
+                    domain,
+                    source_system,
+                    source_event_id,
+                    scan_id,
+                    customer_ref,
+                    anomaly_type,
+                    psycopg2.extras.Json(evidence or {}),
+                    is_synthetic,
+                ),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return row['id'] if row else None
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def add_consequence_action(case_id, recommendation, causal_hypothesis=None, requires_approval=True):
+    """Record a recommended action for a consequence case and return its id."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                INSERT INTO saas_consequence_actions (
+                    case_id, recommendation, causal_hypothesis, requires_approval
+                )
+                VALUES (%s, %s, %s, %s)
+                RETURNING id::text
+                """,
+                (case_id, recommendation, causal_hypothesis, requires_approval),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return row['id'] if row else None
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def record_action_decision(action_id, approval_status, approved_by=None, decision_notes=None):
+    """Record approval or rejection for a consequence action."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE saas_consequence_actions
+                SET approval_status = %s,
+                    approved_by = %s,
+                    decision_notes = %s
+                WHERE id = %s
+                """,
+                (approval_status, approved_by, decision_notes, action_id),
+            )
+            conn.commit()
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def record_action_execution(action_id, execution_status, execution_notes=None):
+    """Record execution status for a consequence action."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE saas_consequence_actions
+                SET execution_status = %s,
+                    execution_notes = %s,
+                    executed_at = CASE WHEN %s IN ('executed', 'failed') THEN NOW() ELSE executed_at END
+                WHERE id = %s
+                """,
+                (execution_status, execution_notes, execution_status, action_id),
+            )
+            conn.commit()
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD'):
+    """Record measured outcome for a consequence action."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE saas_consequence_actions
+                SET outcome_type = %s,
+                    outcome_value = %s,
+                    outcome_currency = %s,
+                    outcome_notes = %s,
+                    measured_at = NOW()
+                WHERE id = %s
+                """,
+                (outcome_type, outcome_value, outcome_currency, outcome_notes, action_id),
+            )
+            conn.commit()
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def get_proof_metrics(domain='revenue_recovery'):
+    """Return proof metrics for System 6 excluding synthetic/demo cases."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*)::int AS real_cases,
+                    COUNT(*) FILTER (WHERE c.status = 'detected')::int AS detected_cases,
+                    COUNT(a.id)::int AS recommended_actions,
+                    COUNT(a.id) FILTER (WHERE a.approval_status = 'approved')::int AS approved_actions,
+                    COUNT(a.id) FILTER (WHERE a.execution_status = 'executed')::int AS executed_actions,
+                    COALESCE(SUM(a.outcome_value) FILTER (WHERE a.outcome_type IN ('recovered_revenue', 'retained_revenue', 'avoided_loss')), 0)::numeric(12,2) AS realized_value,
+                    COUNT(a.id) FILTER (WHERE a.outcome_type IS NOT NULL)::int AS measured_outcomes
+                FROM saas_consequence_cases c
+                LEFT JOIN saas_consequence_actions a ON a.case_id = c.id
+                WHERE c.domain = %s AND c.is_synthetic = FALSE
+                """,
+                (domain,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else {}
+    finally:
+        if conn:
+            pool.putconn(conn)
