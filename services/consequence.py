@@ -7,9 +7,11 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-from models.db import create_consequence_case
+from models.db import create_consequence_case, add_consequence_action
 
 REVENUE_RECOVERY_REQUIRED_EVIDENCE_FIELDS: Dict[str, Dict[str, Any]] = {
     'schema_version': {
@@ -58,6 +60,36 @@ REVENUE_RECOVERY_REQUIRED_EVIDENCE_FIELDS: Dict[str, Dict[str, Any]] = {
         'description': 'True only for demo/sample-derived evidence.',
     },
 }
+
+_SAMPLE_CSV_PATH = Path(__file__).resolve().parent.parent / 'static' / 'sample_data.csv'
+try:
+    SAMPLE_CSV_SHA256 = sha256(_SAMPLE_CSV_PATH.read_bytes()).hexdigest()
+except FileNotFoundError:
+    SAMPLE_CSV_SHA256 = ''
+
+
+def compute_content_sha256(raw_bytes: bytes) -> str:
+    """Return a stable content fingerprint for uploaded bytes."""
+    return sha256(raw_bytes or b'').hexdigest()
+
+
+def is_sample_csv_upload(raw_bytes: bytes) -> bool:
+    """True when uploaded bytes match the shipped sample CSV exactly."""
+    if not SAMPLE_CSV_SHA256:
+        return False
+    return compute_content_sha256(raw_bytes) == SAMPLE_CSV_SHA256
+
+
+def build_pending_recommendation(leak: Dict[str, Any]) -> Tuple[str, str]:
+    """Generate a governed recommendation and causal hypothesis for a leak."""
+    anomaly_type = str(leak.get('pattern') or leak.get('pattern_name', 'unknown')).strip()
+    human_name = leak.get('pattern_name', anomaly_type.replace('_', ' ').title())
+    how_to_fix = (leak.get('how_to_fix') or '').strip()
+    description = (leak.get('description') or '').strip()
+
+    recommendation = how_to_fix or f"Review and remediate detected pattern: {human_name}."
+    causal_hypothesis = description or f"Detected anomaly suggests leakage pattern '{human_name}' is reducing realized revenue."
+    return recommendation, causal_hypothesis
 
 
 def _is_iso8601(value: str) -> bool:
@@ -179,17 +211,28 @@ def build_revenue_recovery_evidence(
     return evidence
 
 
-def infer_synthetic_flag(source_kind: str, explicit_flag: bool | None = None) -> bool:
+def infer_synthetic_flag(
+    source_kind: str,
+    explicit_flag: bool | None = None,
+    raw_bytes: bytes | None = None,
+) -> bool:
     """Infer whether a case must be synthetic.
 
     Demo/sample/test paths are synthetic by definition and must not count as proof.
+    Exact sample CSV re-uploads are also synthetic via content fingerprint.
     """
     if explicit_flag is not None:
         return bool(explicit_flag)
 
     normalized = (source_kind or '').strip().lower()
     synthetic_markers = ('demo', 'sample', 'seed', 'synthetic', 'test')
-    return any(marker in normalized for marker in synthetic_markers)
+    if any(marker in normalized for marker in synthetic_markers):
+        return True
+
+    if raw_bytes is not None and is_sample_csv_upload(raw_bytes):
+        return True
+
+    return False
 
 
 def ingest_scan_result_to_consequence_cases(
@@ -199,6 +242,8 @@ def ingest_scan_result_to_consequence_cases(
     source_kind: str,
     explicit_is_synthetic: bool | None = None,
     customer_ref: str | None = None,
+    raw_bytes: bytes | None = None,
+    create_pending_actions: bool = True,
 ) -> List[Dict[str, Any]]:
     """Create/refresh consequence cases from a scan result.
 
@@ -213,7 +258,7 @@ def ingest_scan_result_to_consequence_cases(
     if not isinstance(leaks, list):
         raise ValueError('scan_result.leaks must be a list')
 
-    is_synthetic = infer_synthetic_flag(source_kind, explicit_is_synthetic)
+    is_synthetic = infer_synthetic_flag(source_kind, explicit_is_synthetic, raw_bytes=raw_bytes)
     created_cases: List[Dict[str, Any]] = []
 
     for leak in leaks:
@@ -242,9 +287,21 @@ def ingest_scan_result_to_consequence_cases(
             customer_ref=customer_ref,
             is_synthetic=is_synthetic,
         )
+
+        action_id = None
+        if create_pending_actions and case_id:
+            recommendation, causal_hypothesis = build_pending_recommendation(leak)
+            action_id = add_consequence_action(
+                case_id,
+                recommendation=recommendation,
+                causal_hypothesis=causal_hypothesis,
+                requires_approval=True,
+            )
+
         created_cases.append(
             {
                 'case_id': case_id,
+                'action_id': action_id,
                 'source_event_id': source_event_id,
                 'anomaly_type': anomaly_type,
                 'is_synthetic': is_synthetic,

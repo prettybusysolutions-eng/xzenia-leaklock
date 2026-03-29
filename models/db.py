@@ -460,6 +460,91 @@ def get_proof_metrics(domain='revenue_recovery'):
             pool.putconn(conn)
 
 
+def quarantine_synthetic_cases(scan_ids=None, source_kind_markers=None):
+    """Mark known demo/sample-derived consequence cases as synthetic.
+
+    Safe to run when there are no matching rows.
+    Returns the number of updated rows.
+    """
+    pool = get_pool()
+    conn = None
+    updated = 0
+    try:
+        conn = pool.getconn()
+        with conn.cursor() as cur:
+            where_clauses = ["is_synthetic = FALSE"]
+            params = []
+
+            if scan_ids:
+                where_clauses.append("scan_id = ANY(%s)")
+                params.append(list(scan_ids))
+
+            if source_kind_markers:
+                marker_clauses = []
+                for marker in source_kind_markers:
+                    marker_clauses.append("COALESCE(evidence->>'source_kind','') ILIKE %s")
+                    params.append(f'%{marker}%')
+                if marker_clauses:
+                    where_clauses.append('(' + ' OR '.join(marker_clauses) + ')')
+
+            if len(where_clauses) == 1:
+                return 0
+
+            cur.execute(
+                f"""
+                UPDATE saas_consequence_cases
+                SET is_synthetic = TRUE,
+                    status = CASE WHEN status = 'detected' THEN 'quarantined_synthetic' ELSE status END
+                WHERE {' AND '.join(where_clauses)}
+                """,
+                params,
+            )
+            updated = cur.rowcount or 0
+            conn.commit()
+            return updated
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def get_recent_consequence_cases(domain='revenue_recovery', limit=10):
+    """Return recent consequence cases with basic action counts for operator reporting."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    c.id::text AS case_id,
+                    c.scan_id,
+                    c.source_system,
+                    c.source_event_id,
+                    c.anomaly_type,
+                    c.is_synthetic,
+                    c.status,
+                    c.detected_at,
+                    COALESCE(c.evidence->'estimated_impact'->>'amount', '0') AS estimated_impact_amount,
+                    COUNT(a.id)::int AS action_count,
+                    COUNT(a.id) FILTER (WHERE a.approval_status = 'pending')::int AS pending_actions,
+                    COUNT(a.id) FILTER (WHERE a.approval_status = 'approved')::int AS approved_actions,
+                    COUNT(a.id) FILTER (WHERE a.execution_status = 'executed')::int AS executed_actions
+                FROM saas_consequence_cases c
+                LEFT JOIN saas_consequence_actions a ON a.case_id = c.id
+                WHERE c.domain = %s
+                GROUP BY c.id
+                ORDER BY c.detected_at DESC
+                LIMIT %s
+                """,
+                (domain, limit),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
 def get_proof_report(domain='revenue_recovery'):
     """Return an operator-facing proof report distinguishing real vs synthetic cases."""
     pool = get_pool()
@@ -516,6 +601,7 @@ def get_proof_report(domain='revenue_recovery'):
                 'cases': case_counts,
                 'actions': action_counts,
                 'proof_metrics': get_proof_metrics(domain),
+                'recent_cases': get_recent_consequence_cases(domain, limit=10),
             }
     finally:
         if conn:

@@ -6,7 +6,7 @@ import uuid
 from templates import page_upload, page_results, page_report
 from services.scanner import scan_file
 from services.cache import cache_get, cache_set
-from services.consequence import ingest_scan_result_to_consequence_cases
+from services.consequence import ingest_scan_result_to_consequence_cases, is_sample_csv_upload
 from models.db import get_pool, get_proof_report
 
 api_bp = Blueprint('api', __name__, url_prefix='')
@@ -166,6 +166,72 @@ def system6_proof_revenue_recovery():
     return jsonify(get_proof_report('revenue_recovery'))
 
 
+@api_bp.route('/ops/system6/proof/revenue-recovery')
+def system6_proof_revenue_recovery_page():
+    """Simple operator-facing proof page for System 6."""
+    report = get_proof_report('revenue_recovery')
+    proof = report.get('proof_metrics', {})
+    recent_cases = report.get('recent_cases', [])
+
+    case_rows = []
+    for case in recent_cases:
+        badge = 'synthetic' if case.get('is_synthetic') else 'real'
+        case_rows.append(
+            f"<tr>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('detected_at','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('anomaly_type','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('source_system','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{badge}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('pending_actions',0)}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('approved_actions',0)}</td>"
+            f"</tr>"
+        )
+    case_rows_html = ''.join(case_rows) or "<tr><td colspan='6' style='padding:10px;color:#94a3b8'>No consequence cases yet.</td></tr>"
+
+    html = f"""<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>System 6 Proof — Revenue Recovery</title>
+<style>
+body{{font-family:Inter,-apple-system,sans-serif;background:#020617;color:#e2e8f0;padding:32px}}
+.card{{background:#0f172a;border:1px solid #1e293b;border-radius:16px;padding:20px;margin-bottom:20px}}
+h1,h2{{margin:0 0 12px 0}} small, p{{color:#94a3b8}}
+.grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}}
+.metric{{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:14px}}
+.value{{font-size:28px;font-weight:700;margin-top:6px}}
+table{{width:100%;border-collapse:collapse}}
+a{{color:#38bdf8}}
+</style>
+</head>
+<body>
+  <h1>System 6 Proof — Revenue Recovery</h1>
+  <p>Proof boundary: only <strong>non-synthetic</strong> consequence cases count as proof.</p>
+  <div class='grid'>
+    <div class='metric'><small>Real cases</small><div class='value'>{report.get('cases',{}).get('real_cases',0)}</div></div>
+    <div class='metric'><small>Synthetic cases</small><div class='value'>{report.get('cases',{}).get('synthetic_cases',0)}</div></div>
+    <div class='metric'><small>Recommended actions</small><div class='value'>{proof.get('recommended_actions',0)}</div></div>
+    <div class='metric'><small>Approved actions</small><div class='value'>{proof.get('approved_actions',0)}</div></div>
+    <div class='metric'><small>Executed actions</small><div class='value'>{proof.get('executed_actions',0)}</div></div>
+    <div class='metric'><small>Realized value</small><div class='value'>${proof.get('realized_value',0)}</div></div>
+  </div>
+  <div class='card'>
+    <h2>Recent consequence cases</h2>
+    <table>
+      <thead><tr><th align='left'>Detected</th><th align='left'>Anomaly</th><th align='left'>Source</th><th align='left'>Class</th><th align='left'>Pending</th><th align='left'>Approved</th></tr></thead>
+      <tbody>{case_rows_html}</tbody>
+    </table>
+  </div>
+  <div class='card'>
+    <h2>Raw proof JSON</h2>
+    <p><a href='/api/system6/proof/revenue-recovery'>View JSON report</a></p>
+  </div>
+</body>
+</html>"""
+    return html
+
+
 @api_bp.route('/report/<scan_id>')
 def report(scan_id):
     """Printable PDF report."""
@@ -230,6 +296,8 @@ def handle_upload():
     last_col_map = {}
     scan_id = str(uuid.uuid4())
     errors = []
+    any_sample_upload = False
+    raw_payloads = []
     
     for uploaded_file in uploaded_files:
         if not uploaded_file or uploaded_file.filename == '':
@@ -244,7 +312,11 @@ def handle_upload():
             if len(raw_bytes) == 0:
                 errors.append(f"File {uploaded_file.filename} is empty.")
                 continue
-            
+
+            file_is_sample = is_sample_csv_upload(raw_bytes)
+            any_sample_upload = any_sample_upload or file_is_sample
+            raw_payloads.append(raw_bytes)
+
             result = scan_csv(raw_bytes)
             
             if result.get('error'):
@@ -281,10 +353,9 @@ def handle_upload():
         'column_mapping': last_col_map,
         'source': 'file_upload',
         'source_kind': 'file_upload',
-        # Uploaded files are treated as real operator evidence unless they flow
-        # through an explicit demo/sample path. Only explicit demo/sample paths get
-        # synthetic=True so proof metrics remain grounded in truth.
-        'is_synthetic': False,
+        # Uploaded files are treated as real operator evidence unless they match
+        # the shipped sample CSV fingerprint or come through an explicit demo path.
+        'is_synthetic': any_sample_upload,
     }
     
     # Save to cache
@@ -307,7 +378,8 @@ def handle_upload():
             result,
             source_system='file_upload',
             source_kind='file_upload',
-            explicit_is_synthetic=False,
+            explicit_is_synthetic=any_sample_upload,
+            raw_bytes=raw_payloads[0] if len(raw_payloads) == 1 else None,
         )
     except Exception as e:
         print(f'[WARN] Consequence intake failed: {e}')
