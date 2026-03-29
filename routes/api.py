@@ -7,7 +7,15 @@ from templates import page_upload, page_results, page_report
 from services.scanner import scan_file
 from services.cache import cache_get, cache_set
 from services.consequence import ingest_scan_result_to_consequence_cases, is_sample_csv_upload
-from models.db import get_pool, get_proof_report
+from models.db import (
+    get_pool,
+    get_proof_report,
+    get_consequence_action,
+    get_case_actions,
+    record_action_decision,
+    record_action_execution,
+    record_action_outcome,
+)
 
 api_bp = Blueprint('api', __name__, url_prefix='')
 
@@ -156,6 +164,93 @@ def sample_csv():
     return send_file('static/sample_data.csv', as_attachment=True, download_name='leaklock_sample.csv')
 
 
+def _json_required_payload():
+    payload = request.get_json(silent=True) or {}
+    if not isinstance(payload, dict):
+        return {}
+    return payload
+
+
+@api_bp.route('/api/system6/actions/<action_id>')
+def system6_get_action(action_id):
+    """Return one action lifecycle record."""
+    action = get_consequence_action(action_id)
+    if not action:
+        return jsonify({'error': 'action_not_found'}), 404
+    return jsonify(action)
+
+
+@api_bp.route('/api/system6/cases/<case_id>/actions')
+def system6_get_case_actions(case_id):
+    """Return all lifecycle actions for a case."""
+    return jsonify({'case_id': case_id, 'actions': get_case_actions(case_id)})
+
+
+@api_bp.route('/api/system6/actions/<action_id>/decision', methods=['POST'])
+def system6_action_decision(action_id):
+    """Approve or reject a pending consequence action with human actor metadata."""
+    payload = _json_required_payload()
+    approval_status = str(payload.get('approval_status', '')).strip().lower()
+    actor = str(payload.get('actor', '')).strip()
+    notes = payload.get('notes')
+
+    try:
+        action = record_action_decision(
+            action_id,
+            approval_status=approval_status,
+            approved_by=actor,
+            decision_notes=notes,
+        )
+    except ValueError as exc:
+        return jsonify({'error': 'invalid_action_decision', 'detail': str(exc)}), 400
+
+    return jsonify({'ok': True, 'action': action})
+
+
+@api_bp.route('/api/system6/actions/<action_id>/execution', methods=['POST'])
+def system6_action_execution(action_id):
+    """Record execution state for an approved consequence action."""
+    payload = _json_required_payload()
+    execution_status = str(payload.get('execution_status', '')).strip().lower()
+    actor = str(payload.get('actor', '')).strip() or None
+    notes = payload.get('notes')
+
+    try:
+        action = record_action_execution(
+            action_id,
+            execution_status=execution_status,
+            execution_notes=notes,
+            execution_actor=actor,
+        )
+    except ValueError as exc:
+        return jsonify({'error': 'invalid_action_execution', 'detail': str(exc)}), 400
+
+    return jsonify({'ok': True, 'action': action})
+
+
+@api_bp.route('/api/system6/actions/<action_id>/outcome', methods=['POST'])
+def system6_action_outcome(action_id):
+    """Record measured outcome for an executed consequence action."""
+    payload = _json_required_payload()
+    outcome_type = str(payload.get('outcome_type', '')).strip()
+    outcome_value = payload.get('outcome_value')
+    outcome_notes = payload.get('outcome_notes')
+    outcome_currency = str(payload.get('outcome_currency', 'USD')).strip() or 'USD'
+
+    try:
+        action = record_action_outcome(
+            action_id,
+            outcome_type=outcome_type,
+            outcome_value=outcome_value,
+            outcome_notes=outcome_notes,
+            outcome_currency=outcome_currency,
+        )
+    except ValueError as exc:
+        return jsonify({'error': 'invalid_action_outcome', 'detail': str(exc)}), 400
+
+    return jsonify({'ok': True, 'action': action})
+
+
 @api_bp.route('/api/system6/proof/revenue-recovery')
 def system6_proof_revenue_recovery():
     """Operator proof report for System 6 / revenue recovery.
@@ -172,6 +267,7 @@ def system6_proof_revenue_recovery_page():
     report = get_proof_report('revenue_recovery')
     proof = report.get('proof_metrics', {})
     recent_cases = report.get('recent_cases', [])
+    recent_actions = report.get('recent_actions', [])
 
     case_rows = []
     for case in recent_cases:
@@ -184,9 +280,30 @@ def system6_proof_revenue_recovery_page():
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{badge}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('pending_actions',0)}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('approved_actions',0)}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('executed_actions',0)}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('measured_outcomes',0)}</td>"
             f"</tr>"
         )
-    case_rows_html = ''.join(case_rows) or "<tr><td colspan='6' style='padding:10px;color:#94a3b8'>No consequence cases yet.</td></tr>"
+    case_rows_html = ''.join(case_rows) or "<tr><td colspan='8' style='padding:10px;color:#94a3b8'>No consequence cases yet.</td></tr>"
+
+    action_rows = []
+    for action in recent_actions:
+        badge = 'synthetic' if action.get('is_synthetic') else 'real'
+        outcome_summary = action.get('outcome_type') or '—'
+        if action.get('outcome_value') is not None:
+            outcome_summary = f"{outcome_summary} (${action.get('outcome_value')})"
+        action_rows.append(
+            f"<tr>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('created_at','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('anomaly_type','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{badge}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('approval_status','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('execution_status','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{outcome_summary}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'><a href=\"/api/system6/actions/{action.get('action_id','')}\">inspect</a></td>"
+            f"</tr>"
+        )
+    action_rows_html = ''.join(action_rows) or "<tr><td colspan='7' style='padding:10px;color:#94a3b8'>No lifecycle actions yet.</td></tr>"
 
     html = f"""<!DOCTYPE html>
 <html lang='en'>
@@ -203,6 +320,7 @@ h1,h2{{margin:0 0 12px 0}} small, p{{color:#94a3b8}}
 .value{{font-size:28px;font-weight:700;margin-top:6px}}
 table{{width:100%;border-collapse:collapse}}
 a{{color:#38bdf8}}
+.code{{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#cbd5e1}}
 </style>
 </head>
 <body>
@@ -214,13 +332,22 @@ a{{color:#38bdf8}}
     <div class='metric'><small>Recommended actions</small><div class='value'>{proof.get('recommended_actions',0)}</div></div>
     <div class='metric'><small>Approved actions</small><div class='value'>{proof.get('approved_actions',0)}</div></div>
     <div class='metric'><small>Executed actions</small><div class='value'>{proof.get('executed_actions',0)}</div></div>
+    <div class='metric'><small>Measured outcomes</small><div class='value'>{proof.get('measured_outcomes',0)}</div></div>
     <div class='metric'><small>Realized value</small><div class='value'>${proof.get('realized_value',0)}</div></div>
   </div>
   <div class='card'>
     <h2>Recent consequence cases</h2>
     <table>
-      <thead><tr><th align='left'>Detected</th><th align='left'>Anomaly</th><th align='left'>Source</th><th align='left'>Class</th><th align='left'>Pending</th><th align='left'>Approved</th></tr></thead>
+      <thead><tr><th align='left'>Detected</th><th align='left'>Anomaly</th><th align='left'>Source</th><th align='left'>Class</th><th align='left'>Pending</th><th align='left'>Approved</th><th align='left'>Executed</th><th align='left'>Measured</th></tr></thead>
       <tbody>{case_rows_html}</tbody>
+    </table>
+  </div>
+  <div class='card'>
+    <h2>Action lifecycle</h2>
+    <p class='code'>Inspect JSON: /api/system6/actions/&lt;action_id&gt; · /api/system6/cases/&lt;case_id&gt;/actions</p>
+    <table>
+      <thead><tr><th align='left'>Created</th><th align='left'>Anomaly</th><th align='left'>Class</th><th align='left'>Approval</th><th align='left'>Execution</th><th align='left'>Outcome</th><th align='left'>Inspect</th></tr></thead>
+      <tbody>{action_rows_html}</tbody>
     </table>
   </div>
   <div class='card'>

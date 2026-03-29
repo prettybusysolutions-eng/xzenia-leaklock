@@ -8,6 +8,9 @@ from config import DB_CONFIG
 # Connection pool - lazily initialized
 _pool = None
 
+VALID_APPROVAL_STATUSES = {'pending', 'approved', 'rejected'}
+VALID_EXECUTION_STATUSES = {'pending', 'executed', 'failed'}
+
 
 def get_pool():
     """Get or create the database connection pool."""
@@ -260,9 +263,13 @@ def init_consequence_tables():
                 requires_approval BOOLEAN NOT NULL DEFAULT TRUE,
                 approval_status TEXT NOT NULL DEFAULT 'pending',
                 approved_by TEXT,
+                decision_actor TEXT,
+                decided_at TIMESTAMPTZ,
                 decision_notes TEXT,
                 executed_at TIMESTAMPTZ,
                 execution_status TEXT NOT NULL DEFAULT 'pending',
+                execution_actor TEXT,
+                execution_updated_at TIMESTAMPTZ,
                 execution_notes TEXT,
                 outcome_type TEXT,
                 outcome_value NUMERIC(12, 2),
@@ -272,9 +279,14 @@ def init_consequence_tables():
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decision_actor TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_actor TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_updated_at TIMESTAMPTZ")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_cases_domain_detected ON saas_consequence_cases(domain, detected_at DESC)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_cases_synthetic ON saas_consequence_cases(is_synthetic)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_actions_case ON saas_consequence_actions(case_id)")
+        cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_consequence_actions_case_active ON saas_consequence_actions(case_id) WHERE approval_status IN ('pending', 'approved')")
         conn.commit()
         print('[DB] consequence tables ready')
     except Exception as e:
@@ -330,12 +342,33 @@ def create_consequence_case(domain, source_system, source_event_id, anomaly_type
 
 
 def add_consequence_action(case_id, recommendation, causal_hypothesis=None, requires_approval=True):
-    """Record a recommended action for a consequence case and return its id."""
+    """Record a recommended action for a consequence case and return its id.
+
+    Deduplication guard:
+    if the case already has an action in pending or approved state, return that
+    action instead of creating another open action for the same case.
+    """
     pool = get_pool()
     conn = None
     try:
         conn = pool.getconn()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT id::text
+                FROM saas_consequence_actions
+                WHERE case_id = %s
+                  AND approval_status IN ('pending', 'approved')
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (case_id,),
+            )
+            existing = cur.fetchone()
+            if existing:
+                conn.commit()
+                return existing['id']
+
             cur.execute(
                 """
                 INSERT INTO saas_consequence_actions (
@@ -354,47 +387,176 @@ def add_consequence_action(case_id, recommendation, causal_hypothesis=None, requ
             pool.putconn(conn)
 
 
-def record_action_decision(action_id, approval_status, approved_by=None, decision_notes=None):
-    """Record approval or rejection for a consequence action."""
+def get_consequence_action(action_id):
+    """Return one consequence action with its parent case context."""
     pool = get_pool()
     conn = None
     try:
         conn = pool.getconn()
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
-                UPDATE saas_consequence_actions
-                SET approval_status = %s,
-                    approved_by = %s,
-                    decision_notes = %s
-                WHERE id = %s
+                SELECT
+                    a.id::text AS action_id,
+                    a.case_id::text AS case_id,
+                    a.recommendation,
+                    a.causal_hypothesis,
+                    a.requires_approval,
+                    a.approval_status,
+                    a.approved_by,
+                    a.decision_actor,
+                    a.decided_at,
+                    a.decision_notes,
+                    a.execution_status,
+                    a.execution_actor,
+                    a.execution_updated_at,
+                    a.execution_notes,
+                    a.executed_at,
+                    a.outcome_type,
+                    a.outcome_value,
+                    a.outcome_currency,
+                    a.outcome_notes,
+                    a.measured_at,
+                    a.created_at,
+                    c.domain,
+                    c.source_system,
+                    c.source_event_id,
+                    c.anomaly_type,
+                    c.is_synthetic,
+                    c.detected_at
+                FROM saas_consequence_actions a
+                JOIN saas_consequence_cases c ON c.id = a.case_id
+                WHERE a.id = %s
+                LIMIT 1
                 """,
-                (approval_status, approved_by, decision_notes, action_id),
+                (action_id,),
             )
-            conn.commit()
+            row = cur.fetchone()
+            return dict(row) if row else None
     finally:
         if conn:
             pool.putconn(conn)
 
 
-def record_action_execution(action_id, execution_status, execution_notes=None):
-    """Record execution status for a consequence action."""
+def get_case_actions(case_id):
+    """Return all actions for a case, newest first."""
     pool = get_pool()
     conn = None
     try:
         conn = pool.getconn()
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    id::text AS action_id,
+                    case_id::text AS case_id,
+                    recommendation,
+                    causal_hypothesis,
+                    requires_approval,
+                    approval_status,
+                    approved_by,
+                    decision_actor,
+                    decided_at,
+                    decision_notes,
+                    execution_status,
+                    execution_actor,
+                    execution_updated_at,
+                    execution_notes,
+                    executed_at,
+                    outcome_type,
+                    outcome_value,
+                    outcome_currency,
+                    outcome_notes,
+                    measured_at,
+                    created_at
+                FROM saas_consequence_actions
+                WHERE case_id = %s
+                ORDER BY created_at DESC
+                """,
+                (case_id,),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def record_action_decision(action_id, approval_status, approved_by=None, decision_notes=None):
+    """Record approval or rejection for a consequence action."""
+    if approval_status not in {'approved', 'rejected'}:
+        raise ValueError('approval_status must be approved or rejected')
+    actor = (approved_by or '').strip()
+    if not actor:
+        raise ValueError('approved_by is required for a decision')
+
+    action = get_consequence_action(action_id)
+    if not action:
+        raise ValueError('action not found')
+    if action.get('approval_status') != 'pending':
+        raise ValueError('only pending actions can be approved or rejected')
+
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                UPDATE saas_consequence_actions
+                SET approval_status = %s,
+                    approved_by = CASE WHEN %s = 'approved' THEN %s ELSE NULL END,
+                    decision_actor = %s,
+                    decided_at = NOW(),
+                    decision_notes = %s
+                WHERE id = %s
+                RETURNING id::text AS action_id
+                """,
+                (approval_status, approval_status, actor, actor, decision_notes, action_id),
+            )
+            row = cur.fetchone()
+            conn.commit()
+            return get_consequence_action(row['action_id']) if row else None
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def record_action_execution(action_id, execution_status, execution_notes=None, execution_actor=None):
+    """Record execution status for a consequence action."""
+    if execution_status not in VALID_EXECUTION_STATUSES:
+        raise ValueError('execution_status must be pending, executed, or failed')
+
+    action = get_consequence_action(action_id)
+    if not action:
+        raise ValueError('action not found')
+    if action.get('approval_status') != 'approved':
+        raise ValueError('only approved actions can move through execution')
+
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
                 UPDATE saas_consequence_actions
                 SET execution_status = %s,
                     execution_notes = %s,
-                    executed_at = CASE WHEN %s IN ('executed', 'failed') THEN NOW() ELSE executed_at END
+                    execution_actor = %s,
+                    execution_updated_at = NOW(),
+                    executed_at = CASE
+                        WHEN %s IN ('executed', 'failed') THEN NOW()
+                        WHEN %s = 'pending' THEN NULL
+                        ELSE executed_at
+                    END
                 WHERE id = %s
+                RETURNING id::text AS action_id
                 """,
-                (execution_status, execution_notes, execution_status, action_id),
+                (execution_status, execution_notes, execution_actor, execution_status, execution_status, action_id),
             )
+            row = cur.fetchone()
             conn.commit()
+            return get_consequence_action(row['action_id']) if row else None
     finally:
         if conn:
             pool.putconn(conn)
@@ -402,11 +564,21 @@ def record_action_execution(action_id, execution_status, execution_notes=None):
 
 def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD'):
     """Record measured outcome for a consequence action."""
+    outcome_type = (outcome_type or '').strip()
+    if not outcome_type:
+        raise ValueError('outcome_type is required')
+
+    action = get_consequence_action(action_id)
+    if not action:
+        raise ValueError('action not found')
+    if action.get('execution_status') != 'executed':
+        raise ValueError('only executed actions can receive measured outcomes')
+
     pool = get_pool()
     conn = None
     try:
         conn = pool.getconn()
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute(
                 """
                 UPDATE saas_consequence_actions
@@ -416,10 +588,13 @@ def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_n
                     outcome_notes = %s,
                     measured_at = NOW()
                 WHERE id = %s
+                RETURNING id::text AS action_id
                 """,
                 (outcome_type, outcome_value, outcome_currency, outcome_notes, action_id),
             )
+            row = cur.fetchone()
             conn.commit()
+            return get_consequence_action(row['action_id']) if row else None
     finally:
         if conn:
             pool.putconn(conn)
@@ -529,12 +704,62 @@ def get_recent_consequence_cases(domain='revenue_recovery', limit=10):
                     COUNT(a.id)::int AS action_count,
                     COUNT(a.id) FILTER (WHERE a.approval_status = 'pending')::int AS pending_actions,
                     COUNT(a.id) FILTER (WHERE a.approval_status = 'approved')::int AS approved_actions,
-                    COUNT(a.id) FILTER (WHERE a.execution_status = 'executed')::int AS executed_actions
+                    COUNT(a.id) FILTER (WHERE a.approval_status = 'rejected')::int AS rejected_actions,
+                    COUNT(a.id) FILTER (WHERE a.execution_status = 'executed')::int AS executed_actions,
+                    COUNT(a.id) FILTER (WHERE a.execution_status = 'failed')::int AS failed_actions,
+                    COUNT(a.id) FILTER (WHERE a.outcome_type IS NOT NULL)::int AS measured_outcomes
                 FROM saas_consequence_cases c
                 LEFT JOIN saas_consequence_actions a ON a.case_id = c.id
                 WHERE c.domain = %s
                 GROUP BY c.id
                 ORDER BY c.detected_at DESC
+                LIMIT %s
+                """,
+                (domain, limit),
+            )
+            return [dict(row) for row in cur.fetchall()]
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def get_recent_consequence_actions(domain='revenue_recovery', limit=20):
+    """Return recent action lifecycle entries for operator inspection."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    a.id::text AS action_id,
+                    a.case_id::text AS case_id,
+                    c.anomaly_type,
+                    c.source_system,
+                    c.is_synthetic,
+                    a.recommendation,
+                    a.requires_approval,
+                    a.approval_status,
+                    a.approved_by,
+                    a.decision_actor,
+                    a.decided_at,
+                    a.decision_notes,
+                    a.execution_status,
+                    a.execution_actor,
+                    a.execution_updated_at,
+                    a.execution_notes,
+                    a.executed_at,
+                    a.outcome_type,
+                    a.outcome_value,
+                    a.outcome_currency,
+                    a.outcome_notes,
+                    a.measured_at,
+                    a.created_at
+                FROM saas_consequence_actions a
+                JOIN saas_consequence_cases c ON c.id = a.case_id
+                WHERE c.domain = %s
+                ORDER BY a.created_at DESC
                 LIMIT %s
                 """,
                 (domain, limit),
@@ -602,6 +827,7 @@ def get_proof_report(domain='revenue_recovery'):
                 'actions': action_counts,
                 'proof_metrics': get_proof_metrics(domain),
                 'recent_cases': get_recent_consequence_cases(domain, limit=10),
+                'recent_actions': get_recent_consequence_actions(domain, limit=20),
             }
     finally:
         if conn:
