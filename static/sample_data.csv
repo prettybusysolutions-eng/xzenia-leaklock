@@ -1,0 +1,95 @@
+date,customer,amount,status,description,discount_percent
+2025-01-03,Dental Care Plus,1250.00,paid,Initial consultation,0
+2025-01-05,Bright Smile Studio,2200.00,paid,Annual contract,0
+2025-01-08,Downtown Dental,890.00,paid,Monthly retainer,0
+2025-01-10,Smile Zone Pro,1500.00,paid,Q1 retainer,0
+2025-01-12,Dental Care Plus,1200.00,paid,Follow-up visit,0
+2025-01-15,Healthy Teeth Inc,3400.00,paid,Comprehensive exam,0
+2025-01-18,Bright Smile Studio,2300.00,paid,Monthly service,0
+2025-01-20,City Dental Group,980.00,paid,Standard cleaning,0
+2025-01-22,Smile Zone Pro,1550.00,paid,Q1 service,5
+2025-01-25,Dental Care Plus,1180.00,paid,Procedure,3
+2025-01-28,Downtown Dental,920.00,paid,Monthly service,3
+2025-01-30,Healthy Teeth Inc,3500.00,paid,Annual plan,3
+2025-02-02,Bright Smile Studio,2350.00,paid,Monthly service,5
+2025-02-05,City Dental Group,1050.00,paid,Enhanced cleaning,7
+2025-02-08,Dental Care Plus,1150.00,paid,Procedure,5
+2025-02-10,Smile Zone Pro,1600.00,paid,Q1 service,7
+2025-02-12,Healthy Teeth Inc,3600.00,paid,Monthly retainer,5
+2025-02-15,Bright Smile Studio,2400.00,paid,Monthly service,7
+2025-02-18,Downtown Dental,950.00,paid,Monthly service,7
+2025-02-20,City Dental Group,2800.00,failed,Annual contract - payment failed,0
+2025-02-22,Dental Care Plus,1120.00,paid,Procedure,8
+2025-02-25,Smile Zone Pro,1650.00,paid,Q1 service,10
+2025-02-28,Healthy Teeth Inc,3700.00,paid,Monthly retainer,8
+2025-03-02,Bright Smile Studio,2450.00,paid,Monthly service,10
+2025-03-05,Downtown Dental,980.00,paid,Monthly service,10
+2025-03-08,City Dental Group,1100.00,paid,Service package,10
+2025-03-10,Dental Care Plus,1100.00,paid,Procedure,10
+2025-03-12,Smile Zone Pro,1700.00,paid,Q1 service,12
+2025-03-15,Healthy Teeth Inc,3800.00,paid,Monthly retainer,10
+2025-03-18,Bright Smile Studio,2500.00,paid,Monthly service,12
+2025-03-20,Downtown Dental,1000.00,paid,Monthly service,12
+2025-03-22,Dental Care Plus,1250.00,paid,Credit memo issued - overcharge,0
+2025-03-25,Smile Zone Pro,1750.00,paid,Q1 service,15
+2025-03-28,Healthy Teeth Inc,3900.00,paid,Monthly retainer,12
+2025-03-30,City Dental Group,3100.00,failed,Annual renewal - card expired,0
+2025-04-02,Bright Smile Studio,2550.00,paid,Monthly service,15
+2025-04-05,Downtown Dental,1020.00,paid,Monthly service,15
+2025-04-08,Dental Care Plus,1080.00,paid,Procedure,12
+2025-04-10,Smile Zone Pro,1800.00,paid,Q2 service,15
+2025-04-12,Healthy Teeth Inc,4000.00,paid,Monthly retainer,15
+2025-04-15,Bright Smile Studio,2600.00,paid,Monthly service,17
+2025-04-18,Downtown Dental,1500.00,paid,Special procedure,0
+2025-04-20,City Dental Group,1200.00,paid,Service addition,15
+2025-04-22,Dental Care Plus,1050.00,paid,Procedure,15
+2025-04-25,Smile Zone Pro,1850.00,paid,Q2 service,18
+2025-04-28,Healthy Teeth Inc,4100.00,paid,Monthly retainer,18
+2025-05-01,Bright Smile Studio,2650.00,paid,Monthly service,18
+2025-05-03,Downtown Dental,1040.00,paid,Monthly service,18
+2025-05-05,Dental Care Plus,1020.00,paid,Procedure,18
+2025-05-08,Smile Zone Pro,1900.00,paid,Q2 service,20
+2025-05-10,Healthy Teeth Inc,4200.00,paid,Monthly retainer,20
+2025-05-12,Bright Smile Studio,2700.00,paid,Monthly service,20
+2025-05-15,Downtown Dental,1060.00,paid,Monthly service,20
+2025-05-18,City Dental Group,1150.00,paid,Service package,20
+2025-05-20,Dental Care Plus,1400.00,failed,Quarterly billing - declined,0
+2025-05-22,Smile Zone Pro,1950.00,paid,Q2 service,22
+2025-05-25,Healthy Teeth Inc,4300.00,paid,Monthly retainer,22
+2025-05-28,Bright Smile Studio,2750.00,paid,Monthly service,22
+2025-05-30,Downtown Dental,1080.00,paid,Monthly service,22
+2025-06-02,Dental Care Plus,990.00,paid,Procedure,20
+2025-06-05,Smile Zone Pro,2000.00,paid,Q2 service,25
+2025-06-08,Healthy Teeth Inc,4400.00,paid,Monthly retainer,25
+2025-06-10,Bright Smile Studio,2800.00,paid,Monthly service,25
+2025-06-12,Downtown Dental,1100.00,paid,Monthly service,25
+2025-06-15,City Dental Group,1250.00,paid,Enhanced package,22
+2025-06-18,Dental Care Plus,960.00,paid,Procedure,22
+2025-06-20,Smile Zone Pro,2050.00,paid,Q2 service,28
+2025-06-22,Healthy Teeth Inc,4500.00,paid,Monthly retainer,28
+2025-06-25,Bright Smile Studio,2850.00,paid,Monthly service,28
+2025-06-28,Downtown Dental,1120.00,paid,Monthly service,28
+2025-07-01,Dental Care Plus,1350.00,paid,Credit adjustment - system error,0
+2025-07-03,Smile Zone Pro,2100.00,paid,Q3 service,30
+2025-07-05,Healthy Teeth Inc,4600.00,paid,Monthly retainer,30
+2025-07-08,Bright Smile Studio,2900.00,paid,Monthly service,30
+2025-07-10,Downtown Dental,1140.00,paid,Monthly service,30
+2025-07-12,City Dental Group,1300.00,paid,Service renewal,25
+2025-07-15,Dental Care Plus,920.00,paid,Procedure,25
+2025-07-18,Smile Zone Pro,2150.00,paid,Q3 service,32
+2025-07-20,Healthy Teeth Inc,4700.00,paid,Monthly retainer,32
+2025-07-22,Bright Smile Studio,2950.00,paid,Monthly service,32
+2025-07-25,Downtown Dental,1160.00,paid,Monthly service,32
+2025-07-28,Dental Care Plus,890.00,paid,Procedure,28
+2025-07-30,Smile Zone Pro,2200.00,paid,Q3 service,35
+2025-08-02,Healthy Teeth Inc,4800.00,paid,Monthly retainer,35
+2025-08-05,Bright Smile Studio,3000.00,paid,Monthly service,35
+2025-08-08,Downtown Dental,1180.00,paid,Monthly service,35
+2025-08-10,City Dental Group,2900.00,failed,Annual renewal - retry failed,0
+2025-08-12,Dental Care Plus,860.00,paid,Procedure,30
+2025-08-15,Smile Zone Pro,2250.00,paid,Q3 service,38
+2025-08-18,Healthy Teeth Inc,4900.00,paid,Monthly retainer,38
+2025-08-20,Bright Smile Studio,3050.00,paid,Monthly service,38
+2025-08-22,Downtown Dental,1200.00,paid,Monthly service,38
+2025-08-25,Dental Care Plus,830.00,paid,Procedure,32
+2025-08-28,Smile Zone Pro,2300.00,paid,Q3 service,40
