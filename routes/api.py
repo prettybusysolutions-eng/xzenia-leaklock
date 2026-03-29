@@ -6,7 +6,8 @@ import uuid
 from templates import page_upload, page_results, page_report
 from services.scanner import scan_file
 from services.cache import cache_get, cache_set
-from models.db import get_pool
+from services.consequence import ingest_scan_result_to_consequence_cases
+from models.db import get_pool, get_proof_report
 
 api_bp = Blueprint('api', __name__, url_prefix='')
 
@@ -104,30 +105,48 @@ def validate_upload(file):
 
 @api_bp.route('/demo')
 def demo_scan():
-    """Run scan on sample CSV."""
+    """Run scan on sample CSV.
+
+    Synthetic boundary:
+    demo/sample-derived consequence cases are marked synthetic=True so they are
+    visible for demos but excluded from System 6 proof metrics.
+    """
     from services.scanner import scan_file
     from csv_scanner import save_scan_to_db
-    
+
     # Read sample CSV
     with open('static/sample_data.csv', 'rb') as f:
         raw = f.read()
-    
+
     # Run scan
     result = scan_file(raw)
-    
+    result['source'] = 'demo_sample_csv'
+    result['source_kind'] = 'demo_sample'
+    result['is_synthetic'] = True
+
     # Save to DB
     try:
         from config import DB_CONFIG
         save_scan_to_db(result, DB_CONFIG)
     except Exception as e:
         print(f'[WARN] Demo scan DB save failed: {e}')
-    
+
+    try:
+        ingest_scan_result_to_consequence_cases(
+            result,
+            source_system='demo_sample_csv',
+            source_kind='demo_sample',
+            explicit_is_synthetic=True,
+        )
+    except Exception as e:
+        print(f'[WARN] Demo consequence intake failed: {e}')
+
     # Save to cache
     try:
         cache_set(f"scan_{result['scan_id']}", result)
     except Exception as e:
         print(f'[WARN] Demo scan cache set failed: {e}')
-    
+
     return redirect(f"/results/{result['scan_id']}")
 
 
@@ -135,6 +154,16 @@ def demo_scan():
 def sample_csv():
     """Serve sample CSV."""
     return send_file('static/sample_data.csv', as_attachment=True, download_name='leaklock_sample.csv')
+
+
+@api_bp.route('/api/system6/proof/revenue-recovery')
+def system6_proof_revenue_recovery():
+    """Operator proof report for System 6 / revenue recovery.
+
+    Proof is restricted to non-synthetic cases. Demo/sample/test cases remain visible
+    for operator awareness, but they do not count as proof of consequence.
+    """
+    return jsonify(get_proof_report('revenue_recovery'))
 
 
 @api_bp.route('/report/<scan_id>')
@@ -250,6 +279,12 @@ def handle_upload():
         'patterns_triggered': len(final_leaks),
         'leaks': final_leaks,
         'column_mapping': last_col_map,
+        'source': 'file_upload',
+        'source_kind': 'file_upload',
+        # Uploaded files are treated as real operator evidence unless they flow
+        # through an explicit demo/sample path. Only explicit demo/sample paths get
+        # synthetic=True so proof metrics remain grounded in truth.
+        'is_synthetic': False,
     }
     
     # Save to cache
@@ -263,6 +298,19 @@ def handle_upload():
         save_scan_to_db(result, DB_CONFIG)
     except Exception as e:
         print(f'[WARN] DB save failed: {e}')
+
+    # First concrete System 6 intake path: scan results become consequence cases
+    # with canonical evidence payloads. This does not fabricate outcomes; it only
+    # records detected anomalies plus their supporting scan evidence.
+    try:
+        ingest_scan_result_to_consequence_cases(
+            result,
+            source_system='file_upload',
+            source_kind='file_upload',
+            explicit_is_synthetic=False,
+        )
+    except Exception as e:
+        print(f'[WARN] Consequence intake failed: {e}')
     
     # Capture email
     email = request.form.get('email', '').strip()

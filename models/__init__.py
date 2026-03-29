@@ -11,6 +11,7 @@ from .db import (
     record_action_execution,
     record_action_outcome,
     get_proof_metrics,
+    get_proof_report,
 )
 
 __all__ = [
@@ -25,4 +26,5 @@ __all__ = [
     'record_action_execution',
     'record_action_outcome',
     'get_proof_metrics',
+    'get_proof_report',
 ]

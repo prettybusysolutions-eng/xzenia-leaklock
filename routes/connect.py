@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from flask import Blueprint, redirect, request, session
 from connectors import CONNECTORS, PLATFORM_META
 from connectors.base import encrypt_token, decrypt_token, normalize_to_scan_rows
+from services.consequence import ingest_scan_result_to_consequence_cases
 
 logger = logging.getLogger(__name__)
 connect_bp = Blueprint('connect', __name__, url_prefix='/connect')
@@ -185,7 +186,9 @@ def oauth_callback(platform):
 
         result = scan_csv(raw_bytes)
         result['source'] = platform
+        result['source_kind'] = 'connector_oauth'
         result['account_name'] = token_data.get('account_name', '')
+        result['is_synthetic'] = False
 
         try:
             cache_set(result['scan_id'], result)
@@ -193,6 +196,15 @@ def oauth_callback(platform):
             pass
         try:
             save_scan_to_db(result, DB_CONFIG)
+        except Exception:
+            pass
+        try:
+            ingest_scan_result_to_consequence_cases(
+                result,
+                source_system=platform,
+                source_kind='connector_oauth',
+                explicit_is_synthetic=False,
+            )
         except Exception:
             pass
 

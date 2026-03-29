@@ -13,6 +13,8 @@ import os
 import uuid
 from flask import Blueprint, redirect, jsonify, request, Response
 
+from services.consequence import ingest_scan_result_to_consequence_cases
+
 logger = logging.getLogger(__name__)
 stripe_scan_bp = Blueprint('stripe_scan', __name__, url_prefix='/scan')
 
@@ -102,6 +104,8 @@ def _run_scan(days_back: int = 365):
     scan = {
         'scan_id': scan_id,
         'source': 'stripe_direct',
+        'source_kind': 'stripe_direct',
+        'is_synthetic': False,
         'account_name': account_name,
         'rows_parsed': report['transactions'],
         'total_revenue': report['total_revenue'],
@@ -128,6 +132,16 @@ def _run_scan(days_back: int = 365):
         save_scan_to_db(scan, DB_CONFIG)
     except Exception as e:
         logger.warning('DB save failed: %s', e)
+
+    try:
+        ingest_scan_result_to_consequence_cases(
+            scan,
+            source_system='stripe_direct',
+            source_kind='stripe_direct',
+            explicit_is_synthetic=False,
+        )
+    except Exception as e:
+        logger.warning('Consequence intake failed: %s', e)
 
     return scan, None
 

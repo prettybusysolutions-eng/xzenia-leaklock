@@ -426,7 +426,12 @@ def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_n
 
 
 def get_proof_metrics(domain='revenue_recovery'):
-    """Return proof metrics for System 6 excluding synthetic/demo cases."""
+    """Return proof metrics for System 6 excluding synthetic/demo cases.
+
+    Truth boundary:
+    - only non-synthetic cases count as proof
+    - demo/sample/test-derived rows are excluded by design
+    """
     pool = get_pool()
     conn = None
     try:
@@ -450,6 +455,68 @@ def get_proof_metrics(domain='revenue_recovery'):
             )
             row = cur.fetchone()
             return dict(row) if row else {}
+    finally:
+        if conn:
+            pool.putconn(conn)
+
+
+def get_proof_report(domain='revenue_recovery'):
+    """Return an operator-facing proof report distinguishing real vs synthetic cases."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(
+                """
+                SELECT
+                    COUNT(*) FILTER (WHERE is_synthetic = FALSE)::int AS real_cases,
+                    COUNT(*) FILTER (WHERE is_synthetic = TRUE)::int AS synthetic_cases,
+                    COUNT(*)::int AS total_cases,
+                    COUNT(*) FILTER (WHERE is_synthetic = FALSE AND status = 'detected')::int AS real_detected_cases,
+                    COUNT(*) FILTER (WHERE is_synthetic = TRUE AND status = 'detected')::int AS synthetic_detected_cases
+                FROM saas_consequence_cases
+                WHERE domain = %s
+                """,
+                (domain,),
+            )
+            case_counts = dict(cur.fetchone() or {})
+
+            cur.execute(
+                """
+                SELECT
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE)::int AS real_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = TRUE)::int AS synthetic_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE AND a.approval_status = 'approved')::int AS real_approved_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = TRUE AND a.approval_status = 'approved')::int AS synthetic_approved_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE AND a.execution_status = 'executed')::int AS real_executed_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = TRUE AND a.execution_status = 'executed')::int AS synthetic_executed_actions,
+                    COALESCE(SUM(a.outcome_value) FILTER (
+                        WHERE c.is_synthetic = FALSE
+                        AND a.outcome_type IN ('recovered_revenue', 'retained_revenue', 'avoided_loss')
+                    ), 0)::numeric(12,2) AS realized_value_real_only,
+                    COALESCE(SUM(a.outcome_value) FILTER (
+                        WHERE c.is_synthetic = TRUE
+                        AND a.outcome_type IN ('recovered_revenue', 'retained_revenue', 'avoided_loss')
+                    ), 0)::numeric(12,2) AS realized_value_synthetic_excluded
+                FROM saas_consequence_cases c
+                LEFT JOIN saas_consequence_actions a ON a.case_id = c.id
+                WHERE c.domain = %s
+                """,
+                (domain,),
+            )
+            action_counts = dict(cur.fetchone() or {})
+
+            return {
+                'domain': domain,
+                'proof_boundary': {
+                    'counts_as_proof': 'non_synthetic_cases_only',
+                    'excluded_from_proof': 'demo_sample_seed_test_cases',
+                },
+                'cases': case_counts,
+                'actions': action_counts,
+                'proof_metrics': get_proof_metrics(domain),
+            }
     finally:
         if conn:
             pool.putconn(conn)
