@@ -1,0 +1,40 @@
+### domains.revenue_recovery_domain
+
+============================================================
+  Xzenia System 5 — Domain Onboarding Validator
+  Module: domains.revenue_recovery_domain
+============================================================
+
+✅ PASS — Domain: revenue_recovery
+  Violations : 0
+  Warnings   : 2
+
+  Warnings:
+    ⚠️ [anomaly_rules[1].check_fn] rule 'subscription_past_due_cluster' has no check_fn (deferred implementation)
+    ⚠️ [anomaly_rules[3].check_fn] rule 'refund_leakage_pattern' has no check_fn (deferred implementation)
+
+  ✅ Domain 'Revenue Recovery' is cleared for activation.
+
+============================================================
+
+
+### domains.pretty_busy_cleaning_domain
+
+============================================================
+  Xzenia System 5 — Domain Onboarding Validator
+  Module: domains.pretty_busy_cleaning_domain
+============================================================
+
+✅ PASS — Domain: pretty_busy_cleaning
+  Violations : 0
+  Warnings   : 3
+
+  Warnings:
+    ⚠️ [anomaly_rules[2].check_fn] rule 'invoice_overdue_cluster' has no check_fn (deferred implementation)
+    ⚠️ [anomaly_rules[3].check_fn] rule 'quality_rating_decline' has no check_fn (deferred implementation)
+    ⚠️ [anomaly_rules[4].check_fn] rule 'repeat_complaint_client' has no check_fn (deferred implementation)
+
+  ✅ Domain 'Pretty Busy Cleaning' is cleared for activation.
+
+============================================================
+
