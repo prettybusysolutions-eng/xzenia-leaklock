@@ -5,7 +5,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
-from models.db import add_consequence_action
+from models.db import add_consequence_action, record_action_decision, record_action_outcome
 from services.consequence import (
     build_revenue_recovery_evidence,
     ingest_scan_result_to_consequence_cases,
@@ -216,11 +216,14 @@ def test_app_boots_and_proof_report_route_works(monkeypatch):
 def test_approval_route_records_human_decision(monkeypatch):
     monkeypatch.setattr(
         'routes.api.record_action_decision',
-        lambda action_id, approval_status, approved_by=None, decision_notes=None: {
+        lambda action_id, approval_status, approved_by=None, decision_notes=None, actor=None, actor_id=None, actor_type=None: {
             'action_id': action_id,
             'approval_status': approval_status,
             'approved_by': approved_by,
             'decision_notes': decision_notes,
+            'decision_actor_payload': actor,
+            'decision_actor_id': actor_id,
+            'decision_actor_type': actor_type,
         },
     )
 
@@ -231,7 +234,11 @@ def test_approval_route_records_human_decision(monkeypatch):
         '/api/system6/actions/action-1/decision',
         json={
             'approval_status': 'approved',
-            'actor': 'human:operator',
+            'actor': {
+                'actor_id': 'user-123',
+                'actor_type': 'human_operator',
+                'display_name': 'Kamm',
+            },
             'notes': 'Approved after manual evidence review.',
         },
     )
@@ -240,17 +247,22 @@ def test_approval_route_records_human_decision(monkeypatch):
     data = response.get_json()
     assert data['ok'] is True
     assert data['action']['approval_status'] == 'approved'
-    assert data['action']['approved_by'] == 'human:operator'
+    assert data['action']['decision_actor_payload']['actor_id'] == 'user-123'
+    assert data['action']['decision_actor_payload']['actor_type'] == 'human_operator'
 
 
 def test_execution_route_records_execution_status(monkeypatch):
     monkeypatch.setattr(
         'routes.api.record_action_execution',
-        lambda action_id, execution_status, execution_notes=None, execution_actor=None: {
+        lambda action_id, execution_status, execution_notes=None, execution_actor=None, actor=None, actor_id=None, actor_type=None, verification=None: {
             'action_id': action_id,
             'execution_status': execution_status,
             'execution_notes': execution_notes,
             'execution_actor': execution_actor,
+            'execution_actor_payload': actor,
+            'execution_actor_id': actor_id,
+            'execution_actor_type': actor_type,
+            'execution_verification_status': (verification or {}).get('status', 'unverified') if isinstance(verification, dict) else 'unverified',
         },
     )
 
@@ -261,8 +273,13 @@ def test_execution_route_records_execution_status(monkeypatch):
         '/api/system6/actions/action-1/execution',
         json={
             'execution_status': 'executed',
-            'actor': 'ops:analyst',
+            'actor_id': 'ops-7',
+            'actor_type': 'operations_user',
             'notes': 'Customer outreach completed.',
+            'verification': {
+                'status': 'pending',
+                'path': 'crm.timeline',
+            },
         },
     )
 
@@ -270,18 +287,26 @@ def test_execution_route_records_execution_status(monkeypatch):
     data = response.get_json()
     assert data['ok'] is True
     assert data['action']['execution_status'] == 'executed'
-    assert data['action']['execution_actor'] == 'ops:analyst'
+    assert data['action']['execution_actor_id'] == 'ops-7'
+    assert data['action']['execution_actor_type'] == 'operations_user'
+    assert data['action']['execution_verification_status'] == 'pending'
 
 
 def test_outcome_route_records_measured_outcome(monkeypatch):
     monkeypatch.setattr(
         'routes.api.record_action_outcome',
-        lambda action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD': {
+        lambda action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD', actor=None, actor_id=None, actor_type=None, outcome_evidence=None, verification=None: {
             'action_id': action_id,
             'outcome_type': outcome_type,
             'outcome_value': outcome_value,
             'outcome_notes': outcome_notes,
             'outcome_currency': outcome_currency,
+            'outcome_actor_payload': actor,
+            'outcome_actor_id': actor_id,
+            'outcome_actor_type': actor_type,
+            'outcome_evidence': outcome_evidence,
+            'outcome_evidence_count': len(outcome_evidence or []),
+            'outcome_verification_status': (verification or {}).get('status', 'unverified') if isinstance(verification, dict) else 'unverified',
         },
     )
 
@@ -295,6 +320,15 @@ def test_outcome_route_records_measured_outcome(monkeypatch):
             'outcome_value': 500.00,
             'outcome_notes': 'Customer paid recovered invoice.',
             'outcome_currency': 'USD',
+            'actor_id': 'ops-7',
+            'actor_type': 'operations_user',
+            'outcome_evidence': [
+                {'ref_type': 'document_url', 'ref_value': 'https://example.com/invoices/paid-123'}
+            ],
+            'verification': {
+                'status': 'pending',
+                'path': 'stripe.payment_event',
+            },
         },
     )
 
@@ -303,3 +337,112 @@ def test_outcome_route_records_measured_outcome(monkeypatch):
     assert data['ok'] is True
     assert data['action']['outcome_type'] == 'recovered_revenue'
     assert data['action']['outcome_value'] == 500.0
+    assert data['action']['outcome_evidence_count'] == 1
+    assert data['action']['outcome_verification_status'] == 'pending'
+
+
+def test_approval_route_rejects_missing_structured_actor(monkeypatch):
+    monkeypatch.setattr(
+        'routes.api.record_action_decision',
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError('structured actor is required: provide actor{actor_id, actor_type} or actor_id + actor_type')),
+    )
+
+    app = create_app()
+    app.config['WTF_CSRF_ENABLED'] = False
+    client = app.test_client()
+    response = client.post(
+        '/api/system6/actions/action-1/decision',
+        json={
+            'approval_status': 'approved',
+            'notes': 'No actor supplied.',
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data['error'] == 'invalid_action_decision'
+    assert 'structured actor is required' in data['detail']
+
+
+def test_outcome_route_requires_evidence_reference(monkeypatch):
+    monkeypatch.setattr(
+        'routes.api.record_action_outcome',
+        lambda *args, **kwargs: (_ for _ in ()).throw(ValueError('outcome_evidence must contain at least one evidence reference')),
+    )
+
+    app = create_app()
+    app.config['WTF_CSRF_ENABLED'] = False
+    client = app.test_client()
+    response = client.post(
+        '/api/system6/actions/action-1/outcome',
+        json={
+            'outcome_type': 'recovered_revenue',
+            'outcome_value': 500.00,
+            'actor_id': 'ops-7',
+            'actor_type': 'operations_user',
+            'outcome_evidence': [],
+        },
+    )
+
+    assert response.status_code == 400
+    data = response.get_json()
+    assert data['error'] == 'invalid_action_outcome'
+    assert 'outcome_evidence must contain at least one evidence reference' in data['detail']
+
+
+def test_record_action_decision_marks_legacy_string_actor(monkeypatch):
+    fake_pool = _FakePool([{'action_id': 'action-legacy'}])
+    monkeypatch.setattr('models.db.get_pool', lambda: fake_pool)
+    monkeypatch.setattr('models.db.get_consequence_action', lambda action_id: {'action_id': action_id, 'approval_status': 'pending'})
+
+    result = record_action_decision(
+        'action-legacy',
+        approval_status='approved',
+        approved_by='human:legacy-operator',
+        decision_notes='Legacy compatibility path.',
+    )
+
+    assert result['action_id'] == 'action-legacy'
+    query, params = fake_pool.conn.cursor_instance.executed[0]
+    assert 'decision_actor_payload' in query
+    assert params[4] == 'human:legacy-operator'
+    assert params[5] == 'legacy_string_actor'
+    assert params[7] is True
+
+
+def test_record_action_outcome_requires_evidence_and_records_verification(monkeypatch):
+    fake_pool = _FakePool([{'action_id': 'action-outcome'}])
+    monkeypatch.setattr('models.db.get_pool', lambda: fake_pool)
+    monkeypatch.setattr('models.db.get_consequence_action', lambda action_id: {'action_id': action_id, 'execution_status': 'executed'})
+
+    result = record_action_outcome(
+        'action-outcome',
+        outcome_type='recovered_revenue',
+        outcome_value=500.0,
+        outcome_notes='Documented recovery.',
+        actor_id='ops-9',
+        actor_type='operations_user',
+        outcome_evidence=[{'ref_type': 'source_record_id', 'ref_value': 'invoice-123'}],
+        verification={'status': 'pending', 'path': 'stripe.invoice'},
+    )
+
+    assert result['action_id'] == 'action-outcome'
+    query, params = fake_pool.conn.cursor_instance.executed[0]
+    assert 'outcome_evidence' in query
+    assert params[4] == 'ops-9'
+    assert params[5] == 'operations_user'
+    assert params[9] == 1
+    assert params[10] == 'pending'
+
+    try:
+        record_action_outcome(
+            'action-outcome',
+            outcome_type='recovered_revenue',
+            actor_id='ops-9',
+            actor_type='operations_user',
+            outcome_evidence=[],
+        )
+    except ValueError as exc:
+        assert 'outcome_evidence must contain at least one evidence reference' in str(exc)
+    else:
+        raise AssertionError('Expected missing evidence to fail')

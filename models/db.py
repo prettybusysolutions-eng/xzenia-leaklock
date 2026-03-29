@@ -1,4 +1,5 @@
 """Database connection and queries for LeakLock."""
+import json
 import psycopg2
 import psycopg2.pool
 import psycopg2.extras
@@ -10,6 +11,122 @@ _pool = None
 
 VALID_APPROVAL_STATUSES = {'pending', 'approved', 'rejected'}
 VALID_EXECUTION_STATUSES = {'pending', 'executed', 'failed'}
+VALID_VERIFICATION_STATUSES = {'unverified', 'pending', 'verified', 'disputed'}
+
+
+def _clean_text(value):
+    """Return a stripped string value or empty string."""
+    if value is None:
+        return ''
+    return str(value).strip()
+
+
+def _normalize_actor_payload(actor=None, actor_id=None, actor_type=None, allow_legacy=True):
+    """Normalize actor identity into a structured truth-bearing payload."""
+    structured = actor if isinstance(actor, dict) else None
+    if structured:
+        normalized_actor_id = _clean_text(structured.get('actor_id') or actor_id)
+        normalized_actor_type = _clean_text(structured.get('actor_type') or actor_type)
+        if not normalized_actor_id or not normalized_actor_type:
+            raise ValueError('actor.actor_id and actor.actor_type are required')
+        return {
+            'actor_id': normalized_actor_id,
+            'actor_type': normalized_actor_type,
+            'display_name': _clean_text(structured.get('display_name')) or None,
+            'auth_subject': _clean_text(structured.get('auth_subject')) or None,
+            'auth_provider': _clean_text(structured.get('auth_provider')) or None,
+            'legacy': False,
+            'raw_actor': None,
+        }
+
+    normalized_actor_id = _clean_text(actor_id)
+    normalized_actor_type = _clean_text(actor_type)
+    if normalized_actor_id and normalized_actor_type:
+        return {
+            'actor_id': normalized_actor_id,
+            'actor_type': normalized_actor_type,
+            'display_name': None,
+            'auth_subject': None,
+            'auth_provider': None,
+            'legacy': False,
+            'raw_actor': None,
+        }
+
+    legacy_actor = _clean_text(actor)
+    if allow_legacy and legacy_actor:
+        return {
+            'actor_id': legacy_actor,
+            'actor_type': 'legacy_string_actor',
+            'display_name': legacy_actor,
+            'auth_subject': None,
+            'auth_provider': None,
+            'legacy': True,
+            'raw_actor': legacy_actor,
+        }
+
+    raise ValueError('structured actor is required: provide actor{actor_id, actor_type} or actor_id + actor_type')
+
+
+def _normalize_evidence_references(evidence_references):
+    """Normalize outcome evidence references into a structured non-empty list."""
+    if not isinstance(evidence_references, list) or not evidence_references:
+        raise ValueError('outcome_evidence must contain at least one evidence reference')
+
+    normalized = []
+    for index, item in enumerate(evidence_references):
+        if isinstance(item, str):
+            value = _clean_text(item)
+            if not value:
+                raise ValueError(f'outcome_evidence[{index}] must not be empty')
+            normalized.append({
+                'ref_type': 'unspecified_reference',
+                'ref_value': value,
+                'label': None,
+            })
+            continue
+
+        if not isinstance(item, dict):
+            raise ValueError(f'outcome_evidence[{index}] must be a string or object')
+
+        ref_type = _clean_text(item.get('ref_type') or item.get('type'))
+        ref_value = _clean_text(item.get('ref_value') or item.get('value') or item.get('url') or item.get('id') or item.get('note_ref'))
+        if not ref_type or not ref_value:
+            raise ValueError(f'outcome_evidence[{index}] requires ref_type and ref_value')
+        normalized.append({
+            'ref_type': ref_type,
+            'ref_value': ref_value,
+            'label': _clean_text(item.get('label')) or None,
+        })
+
+    return normalized
+
+
+def _normalize_verification_payload(verification=None):
+    """Normalize verification scaffold payload without claiming verification exists."""
+    verification = verification or {}
+    if not isinstance(verification, dict):
+        raise ValueError('verification must be an object when provided')
+
+    status = _clean_text(verification.get('status') or 'unverified').lower() or 'unverified'
+    if status not in VALID_VERIFICATION_STATUSES:
+        raise ValueError('verification.status must be unverified, pending, verified, or disputed')
+
+    return {
+        'status': status,
+        'path': _clean_text(verification.get('path')) or None,
+        'notes': _clean_text(verification.get('notes')) or None,
+    }
+
+
+def _actor_display(actor_payload):
+    """Collapse a structured actor payload into a readable label."""
+    if not isinstance(actor_payload, dict):
+        return None
+    actor_type = _clean_text(actor_payload.get('actor_type'))
+    actor_id = _clean_text(actor_payload.get('actor_id'))
+    if actor_type and actor_id:
+        return f'{actor_type}:{actor_id}'
+    return actor_id or actor_type or None
 
 
 def get_pool():
@@ -264,25 +381,69 @@ def init_consequence_tables():
                 approval_status TEXT NOT NULL DEFAULT 'pending',
                 approved_by TEXT,
                 decision_actor TEXT,
+                decision_actor_id TEXT,
+                decision_actor_type TEXT,
+                decision_actor_payload JSONB,
+                decision_actor_is_legacy BOOLEAN NOT NULL DEFAULT FALSE,
                 decided_at TIMESTAMPTZ,
                 decision_notes TEXT,
                 executed_at TIMESTAMPTZ,
                 execution_status TEXT NOT NULL DEFAULT 'pending',
                 execution_actor TEXT,
+                execution_actor_id TEXT,
+                execution_actor_type TEXT,
+                execution_actor_payload JSONB,
+                execution_actor_is_legacy BOOLEAN NOT NULL DEFAULT FALSE,
                 execution_updated_at TIMESTAMPTZ,
                 execution_notes TEXT,
+                execution_verification_status TEXT NOT NULL DEFAULT 'unverified',
+                execution_verification_path TEXT,
+                execution_verification_notes TEXT,
+                execution_verified_at TIMESTAMPTZ,
                 outcome_type TEXT,
                 outcome_value NUMERIC(12, 2),
                 outcome_currency TEXT DEFAULT 'USD',
                 outcome_notes TEXT,
+                outcome_actor_id TEXT,
+                outcome_actor_type TEXT,
+                outcome_actor_payload JSONB,
+                outcome_actor_is_legacy BOOLEAN NOT NULL DEFAULT FALSE,
+                outcome_evidence JSONB NOT NULL DEFAULT '[]'::jsonb,
+                outcome_evidence_count INTEGER NOT NULL DEFAULT 0,
+                outcome_verification_status TEXT NOT NULL DEFAULT 'unverified',
+                outcome_verification_path TEXT,
+                outcome_verification_notes TEXT,
+                outcome_verified_at TIMESTAMPTZ,
                 measured_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
         """)
         cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decision_actor TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decision_actor_id TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decision_actor_type TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decision_actor_payload JSONB")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decision_actor_is_legacy BOOLEAN NOT NULL DEFAULT FALSE")
         cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ")
         cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_actor TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_actor_id TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_actor_type TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_actor_payload JSONB")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_actor_is_legacy BOOLEAN NOT NULL DEFAULT FALSE")
         cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_updated_at TIMESTAMPTZ")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_verification_status TEXT NOT NULL DEFAULT 'unverified'")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_verification_path TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_verification_notes TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS execution_verified_at TIMESTAMPTZ")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_actor_id TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_actor_type TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_actor_payload JSONB")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_actor_is_legacy BOOLEAN NOT NULL DEFAULT FALSE")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_evidence JSONB NOT NULL DEFAULT '[]'::jsonb")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_evidence_count INTEGER NOT NULL DEFAULT 0")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_verification_status TEXT NOT NULL DEFAULT 'unverified'")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_verification_path TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_verification_notes TEXT")
+        cur.execute("ALTER TABLE saas_consequence_actions ADD COLUMN IF NOT EXISTS outcome_verified_at TIMESTAMPTZ")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_cases_domain_detected ON saas_consequence_cases(domain, detected_at DESC)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_cases_synthetic ON saas_consequence_cases(is_synthetic)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_consequence_actions_case ON saas_consequence_actions(case_id)")
@@ -405,17 +566,39 @@ def get_consequence_action(action_id):
                     a.approval_status,
                     a.approved_by,
                     a.decision_actor,
+                    a.decision_actor_id,
+                    a.decision_actor_type,
+                    a.decision_actor_payload,
+                    a.decision_actor_is_legacy,
                     a.decided_at,
                     a.decision_notes,
                     a.execution_status,
                     a.execution_actor,
+                    a.execution_actor_id,
+                    a.execution_actor_type,
+                    a.execution_actor_payload,
+                    a.execution_actor_is_legacy,
                     a.execution_updated_at,
                     a.execution_notes,
+                    a.execution_verification_status,
+                    a.execution_verification_path,
+                    a.execution_verification_notes,
+                    a.execution_verified_at,
                     a.executed_at,
                     a.outcome_type,
                     a.outcome_value,
                     a.outcome_currency,
                     a.outcome_notes,
+                    a.outcome_actor_id,
+                    a.outcome_actor_type,
+                    a.outcome_actor_payload,
+                    a.outcome_actor_is_legacy,
+                    a.outcome_evidence,
+                    a.outcome_evidence_count,
+                    a.outcome_verification_status,
+                    a.outcome_verification_path,
+                    a.outcome_verification_notes,
+                    a.outcome_verified_at,
                     a.measured_at,
                     a.created_at,
                     c.domain,
@@ -456,17 +639,39 @@ def get_case_actions(case_id):
                     approval_status,
                     approved_by,
                     decision_actor,
+                    decision_actor_id,
+                    decision_actor_type,
+                    decision_actor_payload,
+                    decision_actor_is_legacy,
                     decided_at,
                     decision_notes,
                     execution_status,
                     execution_actor,
+                    execution_actor_id,
+                    execution_actor_type,
+                    execution_actor_payload,
+                    execution_actor_is_legacy,
                     execution_updated_at,
                     execution_notes,
+                    execution_verification_status,
+                    execution_verification_path,
+                    execution_verification_notes,
+                    execution_verified_at,
                     executed_at,
                     outcome_type,
                     outcome_value,
                     outcome_currency,
                     outcome_notes,
+                    outcome_actor_id,
+                    outcome_actor_type,
+                    outcome_actor_payload,
+                    outcome_actor_is_legacy,
+                    outcome_evidence,
+                    outcome_evidence_count,
+                    outcome_verification_status,
+                    outcome_verification_path,
+                    outcome_verification_notes,
+                    outcome_verified_at,
                     measured_at,
                     created_at
                 FROM saas_consequence_actions
@@ -481,13 +686,12 @@ def get_case_actions(case_id):
             pool.putconn(conn)
 
 
-def record_action_decision(action_id, approval_status, approved_by=None, decision_notes=None):
+def record_action_decision(action_id, approval_status, approved_by=None, decision_notes=None, actor=None, actor_id=None, actor_type=None):
     """Record approval or rejection for a consequence action."""
     if approval_status not in {'approved', 'rejected'}:
         raise ValueError('approval_status must be approved or rejected')
-    actor = (approved_by or '').strip()
-    if not actor:
-        raise ValueError('approved_by is required for a decision')
+    actor_payload = _normalize_actor_payload(actor=actor or approved_by, actor_id=actor_id, actor_type=actor_type, allow_legacy=True)
+    actor_label = _actor_display(actor_payload)
 
     action = get_consequence_action(action_id)
     if not action:
@@ -506,12 +710,27 @@ def record_action_decision(action_id, approval_status, approved_by=None, decisio
                 SET approval_status = %s,
                     approved_by = CASE WHEN %s = 'approved' THEN %s ELSE NULL END,
                     decision_actor = %s,
+                    decision_actor_id = %s,
+                    decision_actor_type = %s,
+                    decision_actor_payload = %s::jsonb,
+                    decision_actor_is_legacy = %s,
                     decided_at = NOW(),
                     decision_notes = %s
                 WHERE id = %s
                 RETURNING id::text AS action_id
                 """,
-                (approval_status, approval_status, actor, actor, decision_notes, action_id),
+                (
+                    approval_status,
+                    approval_status,
+                    actor_label if approval_status == 'approved' else None,
+                    actor_label,
+                    actor_payload['actor_id'],
+                    actor_payload['actor_type'],
+                    json.dumps(actor_payload),
+                    actor_payload['legacy'],
+                    decision_notes,
+                    action_id,
+                ),
             )
             row = cur.fetchone()
             conn.commit()
@@ -521,10 +740,13 @@ def record_action_decision(action_id, approval_status, approved_by=None, decisio
             pool.putconn(conn)
 
 
-def record_action_execution(action_id, execution_status, execution_notes=None, execution_actor=None):
+def record_action_execution(action_id, execution_status, execution_notes=None, execution_actor=None, actor=None, actor_id=None, actor_type=None, verification=None):
     """Record execution status for a consequence action."""
     if execution_status not in VALID_EXECUTION_STATUSES:
         raise ValueError('execution_status must be pending, executed, or failed')
+    actor_payload = _normalize_actor_payload(actor=actor or execution_actor, actor_id=actor_id, actor_type=actor_type, allow_legacy=True)
+    actor_label = _actor_display(actor_payload)
+    verification_payload = _normalize_verification_payload(verification)
 
     action = get_consequence_action(action_id)
     if not action:
@@ -543,7 +765,15 @@ def record_action_execution(action_id, execution_status, execution_notes=None, e
                 SET execution_status = %s,
                     execution_notes = %s,
                     execution_actor = %s,
+                    execution_actor_id = %s,
+                    execution_actor_type = %s,
+                    execution_actor_payload = %s::jsonb,
+                    execution_actor_is_legacy = %s,
                     execution_updated_at = NOW(),
+                    execution_verification_status = %s,
+                    execution_verification_path = %s,
+                    execution_verification_notes = %s,
+                    execution_verified_at = CASE WHEN %s = 'verified' THEN NOW() ELSE NULL END,
                     executed_at = CASE
                         WHEN %s IN ('executed', 'failed') THEN NOW()
                         WHEN %s = 'pending' THEN NULL
@@ -552,7 +782,22 @@ def record_action_execution(action_id, execution_status, execution_notes=None, e
                 WHERE id = %s
                 RETURNING id::text AS action_id
                 """,
-                (execution_status, execution_notes, execution_actor, execution_status, execution_status, action_id),
+                (
+                    execution_status,
+                    execution_notes,
+                    actor_label,
+                    actor_payload['actor_id'],
+                    actor_payload['actor_type'],
+                    json.dumps(actor_payload),
+                    actor_payload['legacy'],
+                    verification_payload['status'],
+                    verification_payload['path'],
+                    verification_payload['notes'],
+                    verification_payload['status'],
+                    execution_status,
+                    execution_status,
+                    action_id,
+                ),
             )
             row = cur.fetchone()
             conn.commit()
@@ -562,11 +807,14 @@ def record_action_execution(action_id, execution_status, execution_notes=None, e
             pool.putconn(conn)
 
 
-def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD'):
+def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD', actor=None, actor_id=None, actor_type=None, outcome_evidence=None, verification=None):
     """Record measured outcome for a consequence action."""
     outcome_type = (outcome_type or '').strip()
     if not outcome_type:
         raise ValueError('outcome_type is required')
+    actor_payload = _normalize_actor_payload(actor=actor, actor_id=actor_id, actor_type=actor_type, allow_legacy=True)
+    evidence_payload = _normalize_evidence_references(outcome_evidence)
+    verification_payload = _normalize_verification_payload(verification)
 
     action = get_consequence_action(action_id)
     if not action:
@@ -586,11 +834,37 @@ def record_action_outcome(action_id, outcome_type, outcome_value=None, outcome_n
                     outcome_value = %s,
                     outcome_currency = %s,
                     outcome_notes = %s,
+                    outcome_actor_id = %s,
+                    outcome_actor_type = %s,
+                    outcome_actor_payload = %s::jsonb,
+                    outcome_actor_is_legacy = %s,
+                    outcome_evidence = %s::jsonb,
+                    outcome_evidence_count = %s,
+                    outcome_verification_status = %s,
+                    outcome_verification_path = %s,
+                    outcome_verification_notes = %s,
+                    outcome_verified_at = CASE WHEN %s = 'verified' THEN NOW() ELSE NULL END,
                     measured_at = NOW()
                 WHERE id = %s
                 RETURNING id::text AS action_id
                 """,
-                (outcome_type, outcome_value, outcome_currency, outcome_notes, action_id),
+                (
+                    outcome_type,
+                    outcome_value,
+                    outcome_currency,
+                    outcome_notes,
+                    actor_payload['actor_id'],
+                    actor_payload['actor_type'],
+                    json.dumps(actor_payload),
+                    actor_payload['legacy'],
+                    json.dumps(evidence_payload),
+                    len(evidence_payload),
+                    verification_payload['status'],
+                    verification_payload['path'],
+                    verification_payload['notes'],
+                    verification_payload['status'],
+                    action_id,
+                ),
             )
             row = cur.fetchone()
             conn.commit()
@@ -707,7 +981,10 @@ def get_recent_consequence_cases(domain='revenue_recovery', limit=10):
                     COUNT(a.id) FILTER (WHERE a.approval_status = 'rejected')::int AS rejected_actions,
                     COUNT(a.id) FILTER (WHERE a.execution_status = 'executed')::int AS executed_actions,
                     COUNT(a.id) FILTER (WHERE a.execution_status = 'failed')::int AS failed_actions,
-                    COUNT(a.id) FILTER (WHERE a.outcome_type IS NOT NULL)::int AS measured_outcomes
+                    COUNT(a.id) FILTER (WHERE a.outcome_type IS NOT NULL)::int AS measured_outcomes,
+                    COUNT(a.id) FILTER (WHERE COALESCE(a.outcome_evidence_count, 0) > 0)::int AS evidenced_outcomes,
+                    COUNT(a.id) FILTER (WHERE a.execution_verification_status = 'verified')::int AS execution_verified_actions,
+                    COUNT(a.id) FILTER (WHERE a.outcome_verification_status = 'verified')::int AS outcome_verified_actions
                 FROM saas_consequence_cases c
                 LEFT JOIN saas_consequence_actions a ON a.case_id = c.id
                 WHERE c.domain = %s
@@ -743,17 +1020,39 @@ def get_recent_consequence_actions(domain='revenue_recovery', limit=20):
                     a.approval_status,
                     a.approved_by,
                     a.decision_actor,
+                    a.decision_actor_id,
+                    a.decision_actor_type,
+                    a.decision_actor_payload,
+                    a.decision_actor_is_legacy,
                     a.decided_at,
                     a.decision_notes,
                     a.execution_status,
                     a.execution_actor,
+                    a.execution_actor_id,
+                    a.execution_actor_type,
+                    a.execution_actor_payload,
+                    a.execution_actor_is_legacy,
                     a.execution_updated_at,
                     a.execution_notes,
+                    a.execution_verification_status,
+                    a.execution_verification_path,
+                    a.execution_verification_notes,
+                    a.execution_verified_at,
                     a.executed_at,
                     a.outcome_type,
                     a.outcome_value,
                     a.outcome_currency,
                     a.outcome_notes,
+                    a.outcome_actor_id,
+                    a.outcome_actor_type,
+                    a.outcome_actor_payload,
+                    a.outcome_actor_is_legacy,
+                    a.outcome_evidence,
+                    a.outcome_evidence_count,
+                    a.outcome_verification_status,
+                    a.outcome_verification_path,
+                    a.outcome_verification_notes,
+                    a.outcome_verified_at,
                     a.measured_at,
                     a.created_at
                 FROM saas_consequence_actions a
@@ -801,6 +1100,9 @@ def get_proof_report(domain='revenue_recovery'):
                     COUNT(a.id) FILTER (WHERE c.is_synthetic = TRUE AND a.approval_status = 'approved')::int AS synthetic_approved_actions,
                     COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE AND a.execution_status = 'executed')::int AS real_executed_actions,
                     COUNT(a.id) FILTER (WHERE c.is_synthetic = TRUE AND a.execution_status = 'executed')::int AS synthetic_executed_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE AND COALESCE(a.outcome_evidence_count, 0) > 0)::int AS real_evidenced_outcomes,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE AND a.execution_verification_status = 'verified')::int AS real_execution_verified_actions,
+                    COUNT(a.id) FILTER (WHERE c.is_synthetic = FALSE AND a.outcome_verification_status = 'verified')::int AS real_outcome_verified_actions,
                     COALESCE(SUM(a.outcome_value) FILTER (
                         WHERE c.is_synthetic = FALSE
                         AND a.outcome_type IN ('recovered_revenue', 'retained_revenue', 'avoided_loss')

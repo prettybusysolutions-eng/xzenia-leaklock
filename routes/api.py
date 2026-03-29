@@ -171,6 +171,20 @@ def _json_required_payload():
     return payload
 
 
+def _extract_actor_fields(payload):
+    actor = payload.get('actor')
+    actor_id = payload.get('actor_id')
+    actor_type = payload.get('actor_type')
+    return actor, actor_id, actor_type
+
+
+def _extract_verification(payload):
+    verification = payload.get('verification')
+    if verification is None:
+        return None
+    return verification
+
+
 @api_bp.route('/api/system6/actions/<action_id>')
 def system6_get_action(action_id):
     """Return one action lifecycle record."""
@@ -188,18 +202,21 @@ def system6_get_case_actions(case_id):
 
 @api_bp.route('/api/system6/actions/<action_id>/decision', methods=['POST'])
 def system6_action_decision(action_id):
-    """Approve or reject a pending consequence action with human actor metadata."""
+    """Approve or reject a pending consequence action with bound actor metadata."""
     payload = _json_required_payload()
     approval_status = str(payload.get('approval_status', '')).strip().lower()
-    actor = str(payload.get('actor', '')).strip()
+    actor, actor_id, actor_type = _extract_actor_fields(payload)
     notes = payload.get('notes')
 
     try:
         action = record_action_decision(
             action_id,
             approval_status=approval_status,
-            approved_by=actor,
+            approved_by=actor if isinstance(actor, str) else None,
             decision_notes=notes,
+            actor=actor,
+            actor_id=actor_id,
+            actor_type=actor_type,
         )
     except ValueError as exc:
         return jsonify({'error': 'invalid_action_decision', 'detail': str(exc)}), 400
@@ -212,15 +229,20 @@ def system6_action_execution(action_id):
     """Record execution state for an approved consequence action."""
     payload = _json_required_payload()
     execution_status = str(payload.get('execution_status', '')).strip().lower()
-    actor = str(payload.get('actor', '')).strip() or None
+    actor, actor_id, actor_type = _extract_actor_fields(payload)
     notes = payload.get('notes')
+    verification = _extract_verification(payload)
 
     try:
         action = record_action_execution(
             action_id,
             execution_status=execution_status,
             execution_notes=notes,
-            execution_actor=actor,
+            execution_actor=actor if isinstance(actor, str) else None,
+            actor=actor,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            verification=verification,
         )
     except ValueError as exc:
         return jsonify({'error': 'invalid_action_execution', 'detail': str(exc)}), 400
@@ -236,6 +258,9 @@ def system6_action_outcome(action_id):
     outcome_value = payload.get('outcome_value')
     outcome_notes = payload.get('outcome_notes')
     outcome_currency = str(payload.get('outcome_currency', 'USD')).strip() or 'USD'
+    actor, actor_id, actor_type = _extract_actor_fields(payload)
+    outcome_evidence = payload.get('outcome_evidence')
+    verification = _extract_verification(payload)
 
     try:
         action = record_action_outcome(
@@ -244,6 +269,11 @@ def system6_action_outcome(action_id):
             outcome_value=outcome_value,
             outcome_notes=outcome_notes,
             outcome_currency=outcome_currency,
+            actor=actor,
+            actor_id=actor_id,
+            actor_type=actor_type,
+            outcome_evidence=outcome_evidence,
+            verification=verification,
         )
     except ValueError as exc:
         return jsonify({'error': 'invalid_action_outcome', 'detail': str(exc)}), 400
@@ -282,9 +312,11 @@ def system6_proof_revenue_recovery_page():
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('approved_actions',0)}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('executed_actions',0)}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('measured_outcomes',0)}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('evidenced_outcomes',0)}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{case.get('execution_verified_actions',0)}/{case.get('outcome_verified_actions',0)}</td>"
             f"</tr>"
         )
-    case_rows_html = ''.join(case_rows) or "<tr><td colspan='8' style='padding:10px;color:#94a3b8'>No consequence cases yet.</td></tr>"
+    case_rows_html = ''.join(case_rows) or "<tr><td colspan='10' style='padding:10px;color:#94a3b8'>No consequence cases yet.</td></tr>"
 
     action_rows = []
     for action in recent_actions:
@@ -292,18 +324,26 @@ def system6_proof_revenue_recovery_page():
         outcome_summary = action.get('outcome_type') or '—'
         if action.get('outcome_value') is not None:
             outcome_summary = f"{outcome_summary} (${action.get('outcome_value')})"
+        evidence_summary = f"{action.get('outcome_evidence_count', 0)} ref(s)"
+        verification_summary = f"exec={action.get('execution_verification_status','unverified')} · outcome={action.get('outcome_verification_status','unverified')}"
+        actor_summary = action.get('decision_actor') or action.get('approved_by') or action.get('execution_actor') or '—'
+        if action.get('decision_actor_is_legacy') or action.get('execution_actor_is_legacy') or action.get('outcome_actor_is_legacy'):
+            actor_summary = f"{actor_summary} (legacy)"
         action_rows.append(
             f"<tr>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('created_at','')}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('anomaly_type','')}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{badge}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{actor_summary}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('approval_status','')}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{action.get('execution_status','')}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{verification_summary}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{outcome_summary}</td>"
+            f"<td style='padding:10px;border-bottom:1px solid #1e293b'>{evidence_summary}</td>"
             f"<td style='padding:10px;border-bottom:1px solid #1e293b'><a href=\"/api/system6/actions/{action.get('action_id','')}\">inspect</a></td>"
             f"</tr>"
         )
-    action_rows_html = ''.join(action_rows) or "<tr><td colspan='7' style='padding:10px;color:#94a3b8'>No lifecycle actions yet.</td></tr>"
+    action_rows_html = ''.join(action_rows) or "<tr><td colspan='10' style='padding:10px;color:#94a3b8'>No lifecycle actions yet.</td></tr>"
 
     html = f"""<!DOCTYPE html>
 <html lang='en'>
@@ -333,12 +373,15 @@ a{{color:#38bdf8}}
     <div class='metric'><small>Approved actions</small><div class='value'>{proof.get('approved_actions',0)}</div></div>
     <div class='metric'><small>Executed actions</small><div class='value'>{proof.get('executed_actions',0)}</div></div>
     <div class='metric'><small>Measured outcomes</small><div class='value'>{proof.get('measured_outcomes',0)}</div></div>
+    <div class='metric'><small>Evidenced outcomes</small><div class='value'>{report.get('actions',{}).get('real_evidenced_outcomes',0)}</div></div>
+    <div class='metric'><small>Execution verified</small><div class='value'>{report.get('actions',{}).get('real_execution_verified_actions',0)}</div></div>
+    <div class='metric'><small>Outcome verified</small><div class='value'>{report.get('actions',{}).get('real_outcome_verified_actions',0)}</div></div>
     <div class='metric'><small>Realized value</small><div class='value'>${proof.get('realized_value',0)}</div></div>
   </div>
   <div class='card'>
     <h2>Recent consequence cases</h2>
     <table>
-      <thead><tr><th align='left'>Detected</th><th align='left'>Anomaly</th><th align='left'>Source</th><th align='left'>Class</th><th align='left'>Pending</th><th align='left'>Approved</th><th align='left'>Executed</th><th align='left'>Measured</th></tr></thead>
+      <thead><tr><th align='left'>Detected</th><th align='left'>Anomaly</th><th align='left'>Source</th><th align='left'>Class</th><th align='left'>Pending</th><th align='left'>Approved</th><th align='left'>Executed</th><th align='left'>Measured</th><th align='left'>Evidenced</th><th align='left'>Verified E/O</th></tr></thead>
       <tbody>{case_rows_html}</tbody>
     </table>
   </div>
@@ -346,7 +389,7 @@ a{{color:#38bdf8}}
     <h2>Action lifecycle</h2>
     <p class='code'>Inspect JSON: /api/system6/actions/&lt;action_id&gt; · /api/system6/cases/&lt;case_id&gt;/actions</p>
     <table>
-      <thead><tr><th align='left'>Created</th><th align='left'>Anomaly</th><th align='left'>Class</th><th align='left'>Approval</th><th align='left'>Execution</th><th align='left'>Outcome</th><th align='left'>Inspect</th></tr></thead>
+      <thead><tr><th align='left'>Created</th><th align='left'>Anomaly</th><th align='left'>Class</th><th align='left'>Actor</th><th align='left'>Approval</th><th align='left'>Execution</th><th align='left'>Verification</th><th align='left'>Outcome</th><th align='left'>Evidence</th><th align='left'>Inspect</th></tr></thead>
       <tbody>{action_rows_html}</tbody>
     </table>
   </div>
