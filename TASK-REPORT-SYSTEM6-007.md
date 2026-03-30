@@ -30,6 +30,7 @@ This is still not full separation-of-duties proof because:
 - `enforce_admins` remains `false`
 - the repo is still effectively single-principal
 - signed commit enforcement is still off
+- an observed direct admin push to `master` bypassed the PR/check gate in practice, with GitHub explicitly reporting bypassed rule violations
 
 ## Why this matters to System 6
 Layer 6 is about authenticated principal binding, external verification, evidence dereferencing, and a real consequence event. Hardening the public attestation repo’s branch protection increases the credibility of the already-completed GitHub-native proof event and reduces the amount of trust that depends only on local claims.
