@@ -43,6 +43,7 @@
   - required status check: `Attestation Check`
   - 1 approving review + CODEOWNERS review required
   - force pushes / deletions disabled
+- [ ] Migrate attestation governance from single-principal/admin-bypass to multi-principal separation-of-duties
 - [ ] Promote from GitHub-native proof to business-domain proof
 - [ ] Bind authenticated principal at the app/API boundary
 - [ ] Dereference and validate outcome evidence against source systems
