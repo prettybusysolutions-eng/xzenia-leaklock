@@ -12,6 +12,16 @@ from .consequence import (
     build_pending_recommendation,
     ingest_scan_result_to_consequence_cases,
 )
+from .github_consequence import (
+    GitHubReadiness,
+    GitHubConsequenceCase,
+    gh_readiness,
+    github_issue_case,
+    github_pr_case,
+    github_workflow_case,
+    readiness_json,
+    domain_case_json,
+)
 
 __all__ = [
     'scan_file',
@@ -27,4 +37,12 @@ __all__ = [
     'infer_synthetic_flag',
     'build_pending_recommendation',
     'ingest_scan_result_to_consequence_cases',
+    'GitHubReadiness',
+    'GitHubConsequenceCase',
+    'gh_readiness',
+    'github_issue_case',
+    'github_pr_case',
+    'github_workflow_case',
+    'readiness_json',
+    'domain_case_json',
 ]
