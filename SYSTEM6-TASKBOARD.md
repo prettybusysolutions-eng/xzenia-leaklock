@@ -38,6 +38,11 @@
   - issue: `#1`
   - PR: `#2`
   - merge commit: `48b65c26cb6326b6b2fdd3442eb6c8ffe82488a5`
+- [x] GitHub attestation repo moved from policy-only governance toward actual enforced governance
+  - branch protection active on `master`
+  - required status check: `Attestation Check`
+  - 1 approving review + CODEOWNERS review required
+  - force pushes / deletions disabled
 - [ ] Promote from GitHub-native proof to business-domain proof
 - [ ] Bind authenticated principal at the app/API boundary
 - [ ] Dereference and validate outcome evidence against source systems
