@@ -32,6 +32,16 @@
 - [ ] 1 measurable real gain or avoided loss
 - [ ] Full evidence chain complete for all proof cases
 
+## External Attestation Milestone
+- [x] One real GitHub-native attestation loop completed
+  - repo: `prettybusysolutions-eng/xzenia-attestation`
+  - issue: `#1`
+  - PR: `#2`
+  - merge commit: `48b65c26cb6326b6b2fdd3442eb6c8ffe82488a5`
+- [ ] Promote from GitHub-native proof to business-domain proof
+- [ ] Bind authenticated principal at the app/API boundary
+- [ ] Dereference and validate outcome evidence against source systems
+
 ## Non-goals
 - [ ] No simulated ROI counted as proof
 - [ ] No seeded/demo rows in proof metrics
