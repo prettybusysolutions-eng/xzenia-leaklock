@@ -483,8 +483,6 @@ def handle_upload():
                 errors.append(f"File {uploaded_file.filename} is empty.")
                 continue
 
-            file_is_sample = is_sample_csv_upload(raw_bytes)
-            any_sample_upload = any_sample_upload or file_is_sample
             raw_payloads.append(raw_bytes)
 
             result = scan_csv(raw_bytes)
@@ -523,9 +521,8 @@ def handle_upload():
         'column_mapping': last_col_map,
         'source': 'file_upload',
         'source_kind': 'file_upload',
-        # Uploaded files are treated as real operator evidence unless they match
-        # the shipped sample CSV fingerprint or come through an explicit demo path.
-        'is_synthetic': any_sample_upload,
+        # File uploads are always real evidence. Only the /demo path sets is_synthetic=True.
+        'is_synthetic': False,
     }
     
     # Save to cache
@@ -548,8 +545,8 @@ def handle_upload():
             result,
             source_system='file_upload',
             source_kind='file_upload',
-            explicit_is_synthetic=any_sample_upload,
-            raw_bytes=raw_payloads[0] if len(raw_payloads) == 1 else None,
+            explicit_is_synthetic=False,
+            raw_bytes=None,
         )
     except Exception as e:
         print(f'[WARN] Consequence intake failed: {e}')

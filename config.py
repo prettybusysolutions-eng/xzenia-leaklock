@@ -63,3 +63,10 @@ RATE_LIMITS = {
     'default': "200 per day",
     'upload': "10 per hour",
 }
+
+# Email (SMTP)
+SMTP_HOST = os.environ.get('SMTP_HOST', '')
+SMTP_PORT = int(os.environ.get('SMTP_PORT', '587'))
+SMTP_USER = os.environ.get('SMTP_USER', '')
+SMTP_PASS = os.environ.get('SMTP_PASS', '')
+SMTP_FROM = os.environ.get('SMTP_FROM', 'hello@leaklock.io')

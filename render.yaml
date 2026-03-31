@@ -14,14 +14,24 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+        # LEAKLOCK_DOMAIN: set manually after deploy to your Render URL (e.g. https://leaklock.onrender.com)
       - key: LEAKLOCK_DOMAIN
-        fromDatabase:
-          name: leaklock-db
-          property: connectionString
+        sync: false
       - key: FLASK_SECRET_KEY
         generateValue: true
       - key: TOKEN_ENCRYPTION_KEY
         generateValue: true
+      # SMTP — uncomment and fill in with your email provider (Resend, SendGrid, etc.)
+      # - key: SMTP_HOST
+      #   sync: false
+      # - key: SMTP_PORT
+      #   sync: false
+      # - key: SMTP_USER
+      #   sync: false
+      # - key: SMTP_PASS
+      #   sync: false
+      # - key: SMTP_FROM
+      #   sync: false
 
 databases:
   - name: leaklock-db
