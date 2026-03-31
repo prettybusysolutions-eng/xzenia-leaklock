@@ -1,1 +1,1 @@
-web: gunicorn dashboard:app
+web: gunicorn "app:create_app()"

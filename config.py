@@ -29,14 +29,29 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 LEAKLOCK_DOMAIN = os.environ.get('LEAKLOCK_DOMAIN', 'http://localhost:5050')
 STRIPE_WEBHOOK_ID = 'we_1TFKiIAc6hzX3Jk19nbCEBYq'
 
-# DB
-DB_CONFIG = {
-    'host': os.environ.get('DB_HOST', 'localhost'),
-    'dbname': os.environ.get('DB_NAME', 'nexus'),
-    'user': os.environ.get('DB_USER', 'marcuscoarchitect'),
-    'password': os.environ.get('DB_PASSWORD', ''),
-    'port': int(os.environ.get('DB_PORT', 5432)),
-}
+# DB — supports both local dev (individual vars) and Render (DATABASE_URL)
+def _build_db_config():
+    db_url = os.environ.get('DATABASE_URL', '')
+    if db_url:
+        # Parse postgresql://user:pass@host:port/dbname
+        import urllib.parse
+        parsed = urllib.parse.urlparse(db_url)
+        return {
+            'host': parsed.hostname or 'localhost',
+            'dbname': parsed.path.lstrip('/') or 'leaklock',
+            'user': parsed.username or 'render',
+            'password': parsed.password or '',
+            'port': parsed.port or 5432,
+        }
+    return {
+        'host': os.environ.get('DB_HOST', 'localhost'),
+        'dbname': os.environ.get('DB_NAME', 'nexus'),
+        'user': os.environ.get('DB_USER', 'marcuscoarchitect'),
+        'password': os.environ.get('DB_PASSWORD', ''),
+        'port': int(os.environ.get('DB_PORT', 5432)),
+    }
+
+DB_CONFIG = _build_db_config()
 
 # Upload
 UPLOAD_FOLDER = '/tmp/leaklock_uploads'

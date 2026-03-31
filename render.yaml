@@ -1,0 +1,30 @@
+services:
+  - type: web
+    name: leaklock
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn "app:create_app()"
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: LEAKLOCK_DOMAIN
+        fromDatabase:
+          name: leaklock-db
+          property: connectionString
+      - key: FLASK_SECRET_KEY
+        generateValue: true
+      - key: TOKEN_ENCRYPTION_KEY
+        generateValue: true
+
+databases:
+  - name: leaklock-db
+    plan: free
+    databaseName: leaklock
+    ipAllowList: []
