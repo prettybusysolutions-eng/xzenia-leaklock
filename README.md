@@ -247,15 +247,15 @@ Stripe webhook endpoint. Receives `checkout.session.completed` and activates the
 ## Production Requirements
 
 ### Phase 1: Security (Required Before Live Payments)
-- [ ] **Stripe Webhook Signature Verification**: Verify every webhook against `STRIPE_WEBHOOK_SECRET`. Reject all unsigned events. Current implementation may not verify signatures.
+- [x] **Stripe Webhook Signature Verification**: ✅ Every webhook verified against `STRIPE_WEBHOOK_SECRET`. If not configured, all events rejected (HTTP 503).
+- [x] **Stripe Idempotency**: ✅ `create_checkout_session` uses idempotency key derived from scan_id. Duplicate charges on retry impossible.
 - [ ] **File Upload Size Limits**: Enforce maximum upload size (e.g., 50MB). Prevent DoS via large file uploads.
 - [ ] **File Type Validation**: Verify uploaded files are valid CSV before processing. Reject any file that can't be parsed.
 - [ ] **Authentication**: All scan endpoints require valid authentication tokens. No unauthenticated access to scan results.
 - [ ] **SQL Injection**: All queries use parameterized statements. No raw string interpolation.
 
 ### Phase 2: Reliability (Required Before Production Traffic)
-- [ ] **Webhook Dead Letter Queue**: Failed webhook processing retries with exponential backoff. Events that fail after 5 retries stored in DLQ for manual review.
-- [ ] **Stripe Idempotency**: Use `Stripe-Enpoc-Key` on all Stripe API calls to prevent duplicate charges on retry.
+- [x] **Webhook Dead Letter Queue**: ✅ `webhook_dead_letter_queue` table stores failed events with retry_count. Retry endpoint: `POST /webhook/stripe/retry-dlq` (X-Admin-Key auth). Status: `GET /webhook/stripe/dlq-status`.
 - [ ] **Database Transactions**: Wrap scan creation + Stripe session creation in transactions. Roll back on partial failure.
 - [ ] **File Storage**: Currently files processed in memory. Production requires object storage (S3, GCS, or Render Disk) with signed URLs.
 - [ ] **Scan Result Caching**: Cache completed scan results in Redis. Avoid recomputing on repeated lookups.
