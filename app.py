@@ -68,6 +68,13 @@ def create_app():
         init_consequence_tables()
     except Exception as e:
         print(f'[WARN] DB pool init failed: {e}')
+
+    # Initialize API keys table (lazy-loaded on first use, but pre-init here)
+    try:
+        from routes.api import _init_api_keys_table
+        _init_api_keys_table()
+    except Exception as e:
+        print(f'[WARN] API keys table init failed: {e}')
     
     # Health check route
     @app.route('/health')

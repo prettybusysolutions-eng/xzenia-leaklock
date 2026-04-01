@@ -1,7 +1,8 @@
 """API routes for LeakLock."""
+from functools import wraps
 from flask import Blueprint, request, redirect, send_file, jsonify
 from werkzeug.utils import secure_filename
-import uuid
+import uuid, hashlib, os, json
 
 from templates import page_upload, page_results, page_report
 from services.scanner import scan_file
@@ -18,6 +19,180 @@ from models.db import (
 )
 
 api_bp = Blueprint('api', __name__, url_prefix='')
+
+
+# ── API Key Auth ─────────────────────────────────────────────────────────────
+
+_API_KEYS = {}  # In-memory cache: key_hash → key_name (loaded from DB on first use)
+_api_keys_loaded = False
+
+
+def _get_admin_key():
+    return os.environ.get('LEAKLOCK_ADMIN_KEY', '')
+
+
+def _load_api_keys():
+    """Load API keys from PostgreSQL into memory cache."""
+    global _API_KEYS, _api_keys_loaded
+    if _api_keys_loaded:
+        return
+    try:
+        pool = get_pool()
+        conn = pool.getconn()
+        cur = conn.cursor()
+        cur.execute("SELECT key_hash, name FROM api_keys WHERE is_active = TRUE")
+        _API_KEYS = {row[0]: row[1] for row in cur.fetchall()}
+        pool.putconn(conn)
+        _api_keys_loaded = True
+    except Exception as e:
+        print(f"[WARN] Could not load API keys: {e}")
+
+
+def _require_api_key(f):
+    """Decorator: require valid X-API-Key header. Checks against PostgreSQL api_keys table."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        _load_api_keys()
+        provided = request.headers.get('X-API-Key', '')
+        if not provided:
+            return jsonify({'error': 'missing_api_key', 'message': 'X-API-Key header required'}), 401
+        key_hash = hashlib.sha256(provided.encode()).hexdigest()
+        if key_hash not in _API_KEYS:
+            return jsonify({'error': 'invalid_api_key', 'message': 'Invalid or inactive API key'}), 401
+        # Update last_used_at (fire and forget)
+        try:
+            pool = get_pool()
+            conn = pool.getconn()
+            conn.execute(
+                "UPDATE api_keys SET last_used_at = NOW() WHERE key_hash = %s",
+                (key_hash,)
+            )
+            conn.commit()
+            pool.putconn(conn)
+        except Exception:
+            pass
+        return f(*args, **kwargs)
+    return decorated
+
+
+def _init_api_keys_table():
+    """Create api_keys table if not exists."""
+    try:
+        pool = get_pool()
+        conn = pool.getconn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id SERIAL PRIMARY KEY,
+                key_hash TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                last_used_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        conn.commit()
+        pool.putconn(conn)
+    except Exception as e:
+        print(f"[WARN] Could not init api_keys table: {e}")
+
+
+# ── Admin: API Key Management ────────────────────────────────────────────────
+
+@api_bp.route('/admin/keys', methods=['POST'])
+def admin_create_key():
+    """Create a new API key. Requires X-Admin-Key header matching LEACKLOCK_ADMIN_KEY env var."""
+    admin_key = _get_admin_key()
+    provided = request.headers.get('X-Admin-Key', '')
+    if not admin_key or provided != admin_key:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    body = request.get_json() or {}
+    name = body.get('name', '').strip()
+    if not name:
+        return jsonify({'error': 'name required'}), 400
+
+    _init_api_keys_table()
+    raw_key = uuid.uuid4().hex + uuid.uuid4().hex
+    key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO api_keys (key_hash, name) VALUES (%s, %s) RETURNING id, created_at",
+            (key_hash, name)
+        )
+        row = cur.fetchone()
+        conn.commit()
+        pool.putconn(conn)
+        return jsonify({
+            'api_key': raw_key,
+            'id': row[0],
+            'name': name,
+            'created_at': row[1].isoformat() if row[1] else None,
+            'warning': 'Store this key securely. It cannot be retrieved again.'
+        }), 201
+    except Exception as e:
+        pool.putconn(conn)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/admin/keys', methods=['GET'])
+def admin_list_keys():
+    """List all API keys (never returns the key itself)."""
+    admin_key = _get_admin_key()
+    provided = request.headers.get('X-Admin-Key', '')
+    if not admin_key or provided != admin_key:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    _init_api_keys_table()
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, name, is_active, last_used_at, created_at FROM api_keys ORDER BY created_at DESC LIMIT 100"
+        )
+        rows = cur.fetchall()
+        pool.putconn(conn)
+        return jsonify([{
+            'id': r[0], 'name': r[1], 'is_active': r[2],
+            'last_used_at': r[3].isoformat() if r[3] else None,
+            'created_at': r[4].isoformat() if r[4] else None
+        } for r in rows])
+    except Exception as e:
+        pool.putconn(conn)
+        return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route('/admin/keys/<int:key_id>', methods=['DELETE'])
+def admin_revoke_key(key_id):
+    """Revoke an API key by ID."""
+    admin_key = _get_admin_key()
+    provided = request.headers.get('X-Admin-Key', '')
+    if not admin_key or provided != admin_key:
+        return jsonify({'error': 'unauthorized'}), 401
+
+    _init_api_keys_table()
+    global _API_KEYS, _api_keys_loaded
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE api_keys SET is_active = FALSE WHERE id = %s RETURNING id", (key_id,))
+        row = cur.fetchone()
+        conn.commit()
+        pool.putconn(conn)
+        if not row:
+            return jsonify({'error': 'not found'}), 404
+        # Invalidate in-memory cache
+        _api_keys_loaded = False
+        return jsonify({'revoked': True, 'id': key_id})
+    except Exception as e:
+        pool.putconn(conn)
+        return jsonify({'error': str(e)}), 500
 
 
 def get_scan_by_id(scan_id):
@@ -185,6 +360,7 @@ def _extract_verification(payload):
     return verification
 
 
+@_require_api_key
 @api_bp.route('/api/system6/actions/<action_id>')
 def system6_get_action(action_id):
     """Return one action lifecycle record."""
@@ -193,11 +369,13 @@ def system6_get_action(action_id):
         return jsonify({'error': 'action_not_found'}), 404
     return jsonify(action)
 
+@_require_api_key
 
 @api_bp.route('/api/system6/cases/<case_id>/actions')
 def system6_get_case_actions(case_id):
     """Return all lifecycle actions for a case."""
     return jsonify({'case_id': case_id, 'actions': get_case_actions(case_id)})
+@_require_api_key
 
 
 @api_bp.route('/api/system6/actions/<action_id>/decision', methods=['POST'])
@@ -224,6 +402,7 @@ def system6_action_decision(action_id):
     return jsonify({'ok': True, 'action': action})
 
 
+@_require_api_key
 @api_bp.route('/api/system6/actions/<action_id>/execution', methods=['POST'])
 def system6_action_execution(action_id):
     """Record execution state for an approved consequence action."""
@@ -250,6 +429,7 @@ def system6_action_execution(action_id):
     return jsonify({'ok': True, 'action': action})
 
 
+@_require_api_key
 @api_bp.route('/api/system6/actions/<action_id>/outcome', methods=['POST'])
 def system6_action_outcome(action_id):
     """Record measured outcome for an executed consequence action."""
@@ -281,6 +461,7 @@ def system6_action_outcome(action_id):
     return jsonify({'ok': True, 'action': action})
 
 
+@_require_api_key
 @api_bp.route('/api/system6/proof/revenue-recovery')
 def system6_proof_revenue_recovery():
     """Operator proof report for System 6 / revenue recovery.
@@ -411,6 +592,7 @@ def report(scan_id):
     return page_report(scan)
 
 
+@_require_api_key
 @api_bp.route('/api/save-results', methods=['POST'])
 def save_results():
     """Save scan results + capture email via POST form."""
