@@ -52,6 +52,7 @@ def create_app():
     from models.db import (
         get_pool,
         init_payments_table,
+        init_webhook_dlq_table,
         init_scan_emails_table,
         init_connections_table,
         init_scan_cache_table,
@@ -60,6 +61,7 @@ def create_app():
     try:
         get_pool()
         init_payments_table()
+        init_webhook_dlq_table()
         init_scan_emails_table()
         init_connections_table()
         init_scan_cache_table()

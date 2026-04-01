@@ -5,11 +5,52 @@ import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timezone
 
 from config import STRIPE_WEBHOOK_SECRET, LEAKLOCK_DOMAIN
 from models.db import get_pool
 
 webhooks_bp = Blueprint('webhooks', __name__, url_prefix='/webhook')
+
+
+def _enqueue_dlq(stripe_event_id: str, event_type: str, payload: dict, error_message: str):
+    """Store a failed webhook event in the dead letter queue."""
+    try:
+        pool = get_pool()
+        conn = pool.getconn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO webhook_dead_letter_queue
+                (stripe_event_id, event_type, payload, error_message, status, retry_count, created_at)
+            VALUES (%s, %s, %s, %s, 'pending', 0, NOW())
+            ON CONFLICT (stripe_event_id) DO UPDATE
+                SET error_message = EXCLUDED.error_message,
+                    retry_count = webhook_dead_letter_queue.retry_count,
+                    last_retry_at = NOW()
+        """, (stripe_event_id, event_type, json.dumps(payload), error_message))
+        conn.commit()
+        pool.putconn(conn)
+        print(f'[DLQ] Event {stripe_event_id} queued: {error_message}')
+    except Exception as e:
+        print(f'[DLQ] Failed to enqueue event {stripe_event_id}: {e}')
+
+
+def _record_webhook_processed(stripe_event_id: str, event_type: str):
+    """Mark a Stripe event as successfully processed (idempotency check)."""
+    try:
+        pool = get_pool()
+        conn = pool.getconn()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO webhook_dead_letter_queue
+                (stripe_event_id, event_type, payload, error_message, status, created_at)
+            VALUES (%s, %s, '{}'::jsonb, 'PROCESSED', 'resolved', NOW())
+            ON CONFLICT (stripe_event_id) DO NOTHING
+        """, (stripe_event_id, event_type))
+        conn.commit()
+        pool.putconn(conn)
+    except Exception:
+        pass  # Best effort
 
 
 def _send_payment_confirmation_email(to_email: str, scan_id: str, ptype: str, amount_cents: int):
@@ -89,7 +130,7 @@ View your results: {results_url}
 
 @webhooks_bp.route('/stripe', methods=['POST'])
 def stripe_webhook():
-    """Handle Stripe webhook events."""
+    """Handle Stripe webhook events with signature verification and DLQ."""
     from config import STRIPE_SECRET_KEY
     
     stripe.api_key = STRIPE_SECRET_KEY
@@ -97,34 +138,54 @@ def stripe_webhook():
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get('Stripe-Signature', '')
 
-    if STRIPE_WEBHOOK_SECRET:
-        try:
-            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-        except stripe.error.SignatureVerificationError:
-            return 'Invalid signature', 400
-    else:
-        try:
-            event = json.loads(payload)
-        except Exception:
-            return 'Invalid payload', 400
+    # STRIPE_WEBHOOK_SECRET is REQUIRED in production
+    if not STRIPE_WEBHOOK_SECRET:
+        print('[STRIPE] FATAL: STRIPE_WEBHOOK_SECRET not set — rejecting all webhook events')
+        return 'Webhook secret not configured', 503
+
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except stripe.error.SignatureVerificationError:
+        print('[STRIPE] Invalid signature — rejecting event')
+        return 'Invalid signature', 400
+    except ValueError as e:
+        print(f'[STRIPE] Invalid payload: {e}')
+        return 'Invalid payload', 400
 
     event_type = event.get('type', '')
+    stripe_event_id = event.get('id', '')
+
+    # Process with DLQ on failure
+    try:
+        _handle_stripe_event(event)
+        _record_webhook_processed(stripe_event_id, event_type)
+        return 'ok', 200
+    except Exception as e:
+        error_msg = str(e)
+        print(f'[STRIPE] Event processing failed: {error_msg}')
+        _enqueue_dlq(stripe_event_id, event_type, event, error_msg)
+        # Still return 200 to prevent Stripe retry spam for known failure types
+        return 'ok', 200
+
+
+def _handle_stripe_event(event):
+    """Process a verified Stripe event. Raises on failure."""
+    event_type = event.get('type', '')
+    session_data = event['data']['object']
+    metadata = session_data.get('metadata', {})
+    scan_id = metadata.get('scan_id')
+    ptype = metadata.get('type', 'recovery_fee')
+    customer_email = session_data.get('customer_details', {}).get('email', '') or \
+                     session_data.get('customer_email', '')
+    amount_cents = session_data.get('amount_total', 0)
+
+    print(f'[STRIPE] Processing: type={event_type}, scan_id={scan_id}, email={customer_email}')
 
     if event_type == 'checkout.session.completed':
-        session_data = event['data']['object']
-        metadata = session_data.get('metadata', {})
-        scan_id = metadata.get('scan_id')
-        ptype = metadata.get('type', 'recovery_fee')
-        customer_email = session_data.get('customer_details', {}).get('email', '') or \
-                         session_data.get('customer_email', '')
-        amount_cents = session_data.get('amount_total', 0)
-
-        print(f'[STRIPE] Payment completed: type={ptype}, scan_id={scan_id}, email={customer_email}, amount={amount_cents}')
-
-        # Log payment to DB
+        # Log payment to DB (ON CONFLICT ensures idempotency)
+        pool = get_pool()
+        conn = pool.getconn()
         try:
-            pool = get_pool()
-            conn = pool.getconn()
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO saas_payments (stripe_session_id, scan_id, payment_type, customer_email, amount_cents, created_at)
@@ -142,13 +203,105 @@ def stripe_webhook():
                 amount_cents
             ))
             conn.commit()
-            pool.putconn(conn)
             print(f'[STRIPE] Payment recorded: session={session_data.get("id")}')
-        except Exception as e:
-            print(f'[WARN] Failed to log payment to DB: {e}')
+        finally:
+            pool.putconn(conn)
 
         # Send confirmation email
         if customer_email and '@' in customer_email:
             _send_payment_confirmation_email(customer_email, scan_id or '', ptype, amount_cents)
 
-    return 'ok', 200
+
+# ── Webhook DLQ Admin Routes ──────────────────────────────────────────────────
+
+@webhooks_bp.route('/stripe/retry-dlq', methods=['POST'])
+def retry_dlq():
+    """
+    Retry pending webhook DLQ events. Admin only.
+    Protected by FLASK_ADMIN_KEY env var.
+    Usage: POST /webhook/stripe/retry-dlq with header X-Admin-Key
+    """
+    from config import STRIPE_SECRET_KEY
+    import os
+    admin_key = os.environ.get('FLASK_ADMIN_KEY', '')
+    provided_key = request.headers.get('X-Admin-Key', '')
+    
+    if not admin_key or provided_key != admin_key:
+        return 'Unauthorized', 401
+    
+    stripe.api_key = STRIPE_SECRET_KEY
+    pool = get_pool()
+    conn = pool.getconn()
+    processed = 0
+    failed = 0
+    
+    try:
+        cur = conn.cursor()
+        # Get all pending DLQ events
+        cur.execute("""
+            SELECT id, stripe_event_id, event_type, payload, error_message
+            FROM webhook_dead_letter_queue
+            WHERE status = 'pending'
+            AND retry_count < 5
+            ORDER BY created_at ASC
+            LIMIT 50
+        """)
+        rows = cur.fetchall()
+        
+        for row in rows:
+            dlq_id, stripe_event_id, event_type, payload, last_error = row
+            try:
+                # Re-parse the stored payload and process
+                if isinstance(payload, str):
+                    payload = json.loads(payload)
+                _handle_stripe_event(payload)
+                cur.execute("""
+                    UPDATE webhook_dead_letter_queue
+                    SET status = 'resolved', resolved_at = NOW(), last_retry_at = NOW()
+                    WHERE id = %s
+                """, (dlq_id,))
+                conn.commit()
+                processed += 1
+            except Exception as e:
+                cur.execute("""
+                    UPDATE webhook_dead_letter_queue
+                    SET retry_count = retry_count + 1,
+                        last_retry_at = NOW(),
+                        error_message = %s,
+                        status = CASE WHEN retry_count + 1 >= 5 THEN 'failed' ELSE 'pending' END
+                    WHERE id = %s
+                """, (str(e), dlq_id))
+                conn.commit()
+                failed += 1
+        
+        pool.putconn(conn)
+        return {'processed': processed, 'failed': failed, 'remaining': len(rows) - processed}, 200
+    except Exception as e:
+        pool.putconn(conn)
+        return {'error': str(e)}, 500
+
+
+@webhooks_bp.route('/stripe/dlq-status', methods=['GET'])
+def dlq_status():
+    """Get DLQ status. Admin only."""
+    import os
+    admin_key = os.environ.get('FLASK_ADMIN_KEY', '')
+    provided_key = request.headers.get('X-Admin-Key', '')
+    if not admin_key or provided_key != admin_key:
+        return 'Unauthorized', 401
+    
+    pool = get_pool()
+    conn = pool.getconn()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT status, COUNT(*) as count
+            FROM webhook_dead_letter_queue
+            GROUP BY status
+        """)
+        rows = cur.fetchall()
+        pool.putconn(conn)
+        return {status: count for status, count in rows}, 200
+    except Exception as e:
+        pool.putconn(conn)
+        return {'error': str(e)}, 500

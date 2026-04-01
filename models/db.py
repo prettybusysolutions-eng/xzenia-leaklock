@@ -255,6 +255,39 @@ def init_payments_table():
         print(f'[WARN] Could not init saas_payments table: {e}')
 
 
+def init_webhook_dlq_table():
+    """Create webhook_dead_letter_queue table for failed Stripe webhook events."""
+    pool = get_pool()
+    conn = None
+    try:
+        conn = pool.getconn()
+        cur = conn.cursor()
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS webhook_dead_letter_queue (
+                id SERIAL PRIMARY KEY,
+                stripe_event_id TEXT UNIQUE NOT NULL,
+                event_type TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                error_message TEXT NOT NULL,
+                retry_count INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_retry_at TIMESTAMPTZ,
+                resolved_at TIMESTAMPTZ
+            )
+        """)
+        # Index on status + created_at for efficient DLQ polling
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_webhook_dlq_status_created
+            ON webhook_dead_letter_queue (status, created_at)
+        """)
+        conn.commit()
+        pool.putconn(conn)
+        print('[DB] webhook_dead_letter_queue table ready')
+    except Exception as e:
+        print(f'[WARN] Could not init webhook_dead_letter_queue table: {e}')
+
+
 def init_scan_emails_table():
     """Create saas_scan_emails table if it doesn't exist."""
     pool = get_pool()

@@ -1,12 +1,13 @@
 """Stripe integration service."""
 import stripe
+import uuid
 from config import STRIPE_SECRET_KEY, LEAKLOCK_DOMAIN, STRIPE_WEBHOOK_ID
 
 stripe.api_key = STRIPE_SECRET_KEY
 
 
 def create_checkout_session(line_items, mode='payment', success_url=None, cancel_url=None, metadata=None):
-    """Create a Stripe checkout session."""
+    """Create a Stripe checkout session with idempotency key."""
     kwargs = {
         'payment_method_types': ['card'],
         'line_items': line_items,
@@ -17,7 +18,9 @@ def create_checkout_session(line_items, mode='payment', success_url=None, cancel
     if metadata:
         kwargs['metadata'] = metadata
     
-    return stripe.checkout.Session.create(**kwargs)
+    # Idempotency key prevents duplicate sessions on retry
+    idempotency_key = metadata.get('scan_id', uuid.uuid4().hex) if metadata else uuid.uuid4().hex
+    return stripe.checkout.Session.create(idempotency_key=idempotency_key, **kwargs)
 
 
 def update_webhook_url(new_url):
