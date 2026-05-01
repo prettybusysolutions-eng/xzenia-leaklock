@@ -1,8 +1,11 @@
-# LeakLock — Enterprise CSV Data Leak Detection
+# LeakLock
 
-> **"Your CSV data is leaking. Find out who's exfiltrating it — before they do."**
+Forensic visibility for structured data handling.
 
----
+LeakLock is designed for teams that need to know who touched what, when, and where exposure began — without ambiguity and without manual reconstruction.
+
+## Use case
+High-trust environments do not tolerate blind spots around sensitive exports.
 
 ## What It Is
 
