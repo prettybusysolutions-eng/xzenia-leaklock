@@ -1,0 +1,62 @@
+{
+  "kind": "xzenia.system5-v2.proof-cases",
+  "created_at": "2026-06-10T19:25:10Z",
+  "cases": [
+    {
+      "case_id": "OPS-20260610-PLATFORM-SPINE-CI",
+      "signal_name": "workflow_run_completed",
+      "payload": {
+        "repository": "prettybusysolutions-eng/platform-spine",
+        "run_id": "27299464728",
+        "head_sha": "f82cdddb8188df65edf018580838d5fa8da3b70c",
+        "conclusion": "failure",
+        "observed_at": "2026-06-10T19:05:06Z",
+        "source_ref": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/27299464728"
+      },
+      "context": {
+        "failed_test": "work registry creates resumable envelopes",
+        "expected": "dispatch queued task",
+        "actual": "await queue worker dispatch"
+      },
+      "evidence": {
+        "workflow_run": {
+          "repository": "prettybusysolutions-eng/platform-spine",
+          "run_id": "27299464728",
+          "head_sha": "f82cdddb8188df65edf018580838d5fa8da3b70c",
+          "conclusion": "failure",
+          "source_ref": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/27299464728",
+          "sources": [
+            "github-actions-log"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "OPS-20260610-DISK-PRESSURE",
+      "signal_name": "disk_capacity_observed",
+      "payload": {
+        "host_id": "Marcuss-MacBook-Air-2.local",
+        "mount": "/System/Volumes/Data",
+        "used_percent": 97,
+        "free_gib": 3.7,
+        "observed_at": "2026-06-10T19:14:39Z",
+        "source_ref": "telegram-approval-13174"
+      },
+      "context": {
+        "approved_cleanup_message_id": "13174"
+      },
+      "evidence": {
+        "disk_measurement": {
+          "host_id": "Marcuss-MacBook-Air-2.local",
+          "mount": "/System/Volumes/Data",
+          "used_percent": 97,
+          "free_gib": 3.7,
+          "source_ref": "telegram-approval-13174",
+          "sources": [
+            "df-output"
+          ]
+        }
+      }
+    }
+  ]
+}
