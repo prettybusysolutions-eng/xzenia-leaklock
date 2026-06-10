@@ -1,6 +1,8 @@
 """Tests for System 6 proof, intake, and lifecycle routes."""
 import os
 import sys
+import json
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -13,6 +15,7 @@ from services.consequence import (
     is_sample_csv_upload,
     validate_revenue_recovery_evidence,
 )
+from services.github_consequence import build_operational_proof
 
 
 def _example_scan(scan_id='scan-123'):
@@ -149,6 +152,53 @@ def test_sample_csv_fingerprint_marks_upload_synthetic():
         raw = f.read()
     assert is_sample_csv_upload(raw) is True
     assert infer_synthetic_flag('file_upload', raw_bytes=raw) is True
+
+
+def _github_proof_bundle():
+    path = Path(__file__).resolve().parents[1] / 'evidence' / 'system6' / 'github-ops-2026-06-10.json'
+    return json.loads(path.read_text())
+
+
+def test_github_operational_proof_accepts_real_bundle():
+    report = build_operational_proof(_github_proof_bundle())
+    assert report['valid'] is True
+    assert report['counts']['real_external_cases'] == 10
+    assert report['counts']['governed_actions_proposed'] == 4
+    assert report['counts']['verified_outcomes'] == 4
+    assert report['metrics']['workflows_restored'] == 4
+    assert report['proof_boundary']['monetary_value_claimed'] is False
+
+
+def test_github_operational_proof_rejects_cross_repo_outcome():
+    bundle = _github_proof_bundle()
+    bundle['interventions'][0]['outcome']['repo'] = 'prettybusysolutions-eng/wrong-repo'
+    report = build_operational_proof(bundle)
+    assert report['valid'] is False
+    assert any('outcome repo must match source repo' in error for error in report['errors'])
+
+
+def test_github_operational_proof_rejects_unapproved_action():
+    bundle = _github_proof_bundle()
+    del bundle['interventions'][0]['approval']['message_id']
+    report = build_operational_proof(bundle)
+    assert report['valid'] is False
+    assert any('approval missing fields' in error for error in report['errors'])
+
+
+def test_github_operational_proof_rejects_commit_mismatch():
+    bundle = _github_proof_bundle()
+    bundle['interventions'][0]['execution']['commit_sha'] = '0' * 40
+    report = build_operational_proof(bundle)
+    assert report['valid'] is False
+    assert any('execution commit_sha must match outcome head_sha' in error for error in report['errors'])
+
+
+def test_github_operational_proof_rejects_empty_proposal():
+    bundle = _github_proof_bundle()
+    bundle['interventions'][0]['proposal'] = ''
+    report = build_operational_proof(bundle)
+    assert report['valid'] is False
+    assert any('intervention proposal must not be empty' in error for error in report['errors'])
 
 
 def test_add_consequence_action_dedupes_existing_open_action(monkeypatch):

@@ -1,0 +1,218 @@
+{
+  "schema_version": "system6.github_ops.bundle.v1",
+  "captured_at": "2026-06-10T19:50:00Z",
+  "cases": [
+    {
+      "case_id": "GH-OPS-001",
+      "repo": "prettybusysolutions-eng/imos",
+      "run_id": "27289631280",
+      "workflow_name": "Python integrity",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T16:15:41Z",
+      "updated_at": "2026-06-10T16:15:57Z",
+      "head_sha": "5b9e3320b88c930f6315f3a646790c5edcb340dd",
+      "url": "https://github.com/prettybusysolutions-eng/imos/actions/runs/27289631280"
+    },
+    {
+      "case_id": "GH-OPS-002",
+      "repo": "prettybusysolutions-eng/imos",
+      "run_id": "27289523097",
+      "workflow_name": "Python integrity",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T16:13:43Z",
+      "updated_at": "2026-06-10T16:14:00Z",
+      "head_sha": "fedd8b7da7ebdc9fb666deb644870065f6b58176",
+      "url": "https://github.com/prettybusysolutions-eng/imos/actions/runs/27289523097"
+    },
+    {
+      "case_id": "GH-OPS-003",
+      "repo": "prettybusysolutions-eng/imos",
+      "run_id": "27289054181",
+      "workflow_name": "Python integrity",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T16:04:55Z",
+      "updated_at": "2026-06-10T16:05:04Z",
+      "head_sha": "4289fcedd21f3406eb329f05be714f4903927135",
+      "url": "https://github.com/prettybusysolutions-eng/imos/actions/runs/27289054181"
+    },
+    {
+      "case_id": "GH-OPS-004",
+      "repo": "prettybusysolutions-eng/context-nexus",
+      "run_id": "27289056096",
+      "workflow_name": "Python integrity",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T16:04:57Z",
+      "updated_at": "2026-06-10T16:05:08Z",
+      "head_sha": "b94f9db5a4b69d839466078d347ebe49793e77e9",
+      "url": "https://github.com/prettybusysolutions-eng/context-nexus/actions/runs/27289056096"
+    },
+    {
+      "case_id": "GH-OPS-005",
+      "repo": "prettybusysolutions-eng/ntz-tb-rescue-funder-packet-private",
+      "run_id": "27289040787",
+      "workflow_name": "Repository integrity",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T16:04:41Z",
+      "updated_at": "2026-06-10T16:04:51Z",
+      "head_sha": "0a6d98db6143609844e8bad58aff9d414dbb65d7",
+      "url": "https://github.com/prettybusysolutions-eng/ntz-tb-rescue-funder-packet-private/actions/runs/27289040787"
+    },
+    {
+      "case_id": "GH-OPS-006",
+      "repo": "prettybusysolutions-eng/platform-spine",
+      "run_id": "27299464728",
+      "workflow_name": "ci",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T19:04:55Z",
+      "updated_at": "2026-06-10T19:05:09Z",
+      "head_sha": "f82cdddb8188df65edf018580838d5fa8da3b70c",
+      "url": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/27299464728"
+    },
+    {
+      "case_id": "GH-OPS-007",
+      "repo": "prettybusysolutions-eng/platform-spine",
+      "run_id": "27299464121",
+      "workflow_name": "ci",
+      "conclusion": "failure",
+      "created_at": "2026-06-10T19:04:54Z",
+      "updated_at": "2026-06-10T19:05:09Z",
+      "head_sha": "240f6b614d5c1c1177c29d54e1a169ab05493049",
+      "url": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/27299464121"
+    },
+    {
+      "case_id": "GH-OPS-008",
+      "repo": "prettybusysolutions-eng/platform-spine",
+      "run_id": "24244799207",
+      "workflow_name": "ci",
+      "conclusion": "failure",
+      "created_at": "2026-04-10T13:15:58Z",
+      "updated_at": "2026-04-10T13:16:14Z",
+      "head_sha": "3c28482c1796d49f8b80b322b4d61600593eea0f",
+      "url": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/24244799207"
+    },
+    {
+      "case_id": "GH-OPS-009",
+      "repo": "prettybusysolutions-eng/xzenia-leaklock",
+      "run_id": "23858362089",
+      "workflow_name": "Deploy to Render",
+      "conclusion": "failure",
+      "created_at": "2026-04-01T16:07:01Z",
+      "updated_at": "2026-04-01T16:07:10Z",
+      "head_sha": "40290b5a9b1495b1d00671633752c02da223c2d1",
+      "url": "https://github.com/prettybusysolutions-eng/xzenia-leaklock/actions/runs/23858362089"
+    },
+    {
+      "case_id": "GH-OPS-010",
+      "repo": "prettybusysolutions-eng/xzenia-leaklock",
+      "run_id": "23855322152",
+      "workflow_name": "Deploy to Render",
+      "conclusion": "failure",
+      "created_at": "2026-04-01T15:00:22Z",
+      "updated_at": "2026-04-01T15:00:31Z",
+      "head_sha": "ba8eafd2a1126df2123d887da7ae0df56995dc89",
+      "url": "https://github.com/prettybusysolutions-eng/xzenia-leaklock/actions/runs/23855322152"
+    }
+  ],
+  "interventions": [
+    {
+      "case_id": "GH-OPS-001",
+      "proposal": "Install the missing HTTP test dependency and run the real pytest suite.",
+      "approval": {
+        "actor_id": "6620375090",
+        "actor_type": "human_operator",
+        "channel": "telegram",
+        "message_id": "13154",
+        "approved_scope": "GitHub Phase 2"
+      },
+      "execution": {
+        "commit_sha": "74cbb68985f6f1c488141828a16b7dbb5d53131c",
+        "summary": "Run pytest suite after dependency correction."
+      },
+      "outcome": {
+        "repo": "prettybusysolutions-eng/imos",
+        "run_id": "27289727012",
+        "workflow_name": "Python integrity",
+        "conclusion": "success",
+        "created_at": "2026-06-10T16:17:32Z",
+        "updated_at": "2026-06-10T16:17:49Z",
+        "head_sha": "74cbb68985f6f1c488141828a16b7dbb5d53131c",
+        "url": "https://github.com/prettybusysolutions-eng/imos/actions/runs/27289727012"
+      }
+    },
+    {
+      "case_id": "GH-OPS-004",
+      "proposal": "Compile executable Python sources while excluding a SQL-bearing .py artifact.",
+      "approval": {
+        "actor_id": "6620375090",
+        "actor_type": "human_operator",
+        "channel": "telegram",
+        "message_id": "13154",
+        "approved_scope": "GitHub Phase 2"
+      },
+      "execution": {
+        "commit_sha": "ae30b329b35186a88867919feb725edfa76196e3",
+        "summary": "Correct Python integrity scope."
+      },
+      "outcome": {
+        "repo": "prettybusysolutions-eng/context-nexus",
+        "run_id": "27289517666",
+        "workflow_name": "Python integrity",
+        "conclusion": "success",
+        "created_at": "2026-06-10T16:13:37Z",
+        "updated_at": "2026-06-10T16:13:48Z",
+        "head_sha": "ae30b329b35186a88867919feb725edfa76196e3",
+        "url": "https://github.com/prettybusysolutions-eng/context-nexus/actions/runs/27289517666"
+      }
+    },
+    {
+      "case_id": "GH-OPS-005",
+      "proposal": "Remove the invalid generic JSON assumption from repository integrity checks.",
+      "approval": {
+        "actor_id": "6620375090",
+        "actor_type": "human_operator",
+        "channel": "telegram",
+        "message_id": "13154",
+        "approved_scope": "GitHub Phase 2"
+      },
+      "execution": {
+        "commit_sha": "2a15311d96eb93fae442f482162a9a99a4434dca",
+        "summary": "Align repository integrity checks with repository contents."
+      },
+      "outcome": {
+        "repo": "prettybusysolutions-eng/ntz-tb-rescue-funder-packet-private",
+        "run_id": "27289511354",
+        "workflow_name": "Repository integrity",
+        "conclusion": "success",
+        "created_at": "2026-06-10T16:13:30Z",
+        "updated_at": "2026-06-10T16:13:38Z",
+        "head_sha": "2a15311d96eb93fae442f482162a9a99a4434dca",
+        "url": "https://github.com/prettybusysolutions-eng/ntz-tb-rescue-funder-packet-private/actions/runs/27289511354"
+      }
+    },
+    {
+      "case_id": "GH-OPS-006",
+      "proposal": "Align the stale work-envelope assertion with auto-enqueue behavior.",
+      "approval": {
+        "actor_id": "6620375090",
+        "actor_type": "human_operator",
+        "channel": "telegram",
+        "message_id": "13170",
+        "approved_scope": "GitHub Phase 3"
+      },
+      "execution": {
+        "commit_sha": "2d5cf13c4b029fb0d552abd1cf9bdb9933ed885e",
+        "summary": "Correct the stale platform-spine test assertion."
+      },
+      "outcome": {
+        "repo": "prettybusysolutions-eng/platform-spine",
+        "run_id": "27299896596",
+        "workflow_name": "ci",
+        "conclusion": "success",
+        "created_at": "2026-06-10T19:12:35Z",
+        "updated_at": "2026-06-10T19:12:53Z",
+        "head_sha": "2d5cf13c4b029fb0d552abd1cf9bdb9933ed885e",
+        "url": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/27299896596"
+      }
+    }
+  ]
+}
