@@ -1,0 +1,62 @@
+{
+  "counts": {
+    "approved_actions_executed": 4,
+    "governed_actions_proposed": 4,
+    "real_external_cases": 10,
+    "verified_outcomes": 4
+  },
+  "domain": "github_ops",
+  "errors": [],
+  "live_verification": {
+    "checked_snapshots": 14,
+    "errors": [],
+    "requested": true,
+    "valid": true
+  },
+  "metrics": {
+    "mean_recovery_seconds": 405.75,
+    "total_recovery_seconds": 1623,
+    "workflows_restored": 4
+  },
+  "proof_boundary": {
+    "monetary_value_claimed": false,
+    "not_proved": "revenue recovery or monetary value",
+    "proved": "externally verified operational consequence"
+  },
+  "recoveries": [
+    {
+      "case_id": "GH-OPS-001",
+      "outcome_run_id": "27289727012",
+      "recovery_seconds": 112,
+      "repo": "prettybusysolutions-eng/imos",
+      "source_run_id": "27289631280",
+      "verification_url": "https://github.com/prettybusysolutions-eng/imos/actions/runs/27289727012"
+    },
+    {
+      "case_id": "GH-OPS-004",
+      "outcome_run_id": "27289517666",
+      "recovery_seconds": 520,
+      "repo": "prettybusysolutions-eng/context-nexus",
+      "source_run_id": "27289056096",
+      "verification_url": "https://github.com/prettybusysolutions-eng/context-nexus/actions/runs/27289517666"
+    },
+    {
+      "case_id": "GH-OPS-005",
+      "outcome_run_id": "27289511354",
+      "recovery_seconds": 527,
+      "repo": "prettybusysolutions-eng/ntz-tb-rescue-funder-packet-private",
+      "source_run_id": "27289040787",
+      "verification_url": "https://github.com/prettybusysolutions-eng/ntz-tb-rescue-funder-packet-private/actions/runs/27289511354"
+    },
+    {
+      "case_id": "GH-OPS-006",
+      "outcome_run_id": "27299896596",
+      "recovery_seconds": 464,
+      "repo": "prettybusysolutions-eng/platform-spine",
+      "source_run_id": "27299464728",
+      "verification_url": "https://github.com/prettybusysolutions-eng/platform-spine/actions/runs/27299896596"
+    }
+  ],
+  "schema_version": "system6.github_ops.v1",
+  "valid": true
+}
