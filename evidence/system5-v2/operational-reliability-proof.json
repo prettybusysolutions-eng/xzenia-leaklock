@@ -1,0 +1,121 @@
+{
+  "activation": {
+    "activated": true,
+    "health": {
+      "message": "Operational reliability pack is registered.",
+      "status": "ok"
+    },
+    "validation": {
+      "domain_id": "operational_reliability",
+      "passed": true,
+      "violation_count": 0,
+      "violations": [],
+      "warning_count": 0,
+      "warnings": []
+    }
+  },
+  "generated_at": "2026-06-10T19:33:44.504909+00:00",
+  "kind": "xzenia.system5-v2.proof-report",
+  "module": "domains.operational_reliability_domain",
+  "results": [
+    {
+      "accepted": true,
+      "case_id": "OPS-20260610-PLATFORM-SPINE-CI",
+      "domain_id": "operational_reliability",
+      "errors": [],
+      "findings": [
+        {
+          "action_proposals": [
+            {
+              "action_id": "collect_bounded_diagnostics",
+              "approval_required": false,
+              "description": "Collect read-only health, logs, and configuration evidence.",
+              "risk_level": "low",
+              "status": "ready_for_governed_execution",
+              "verification_fields": [
+                "diagnostic_bundle_ref",
+                "collected_at"
+              ]
+            },
+            {
+              "action_id": "propose_code_repair",
+              "approval_required": true,
+              "description": "Prepare a scoped code repair for the evidenced workflow failure.",
+              "risk_level": "medium",
+              "status": "awaiting_approval",
+              "verification_fields": [
+                "commit_sha",
+                "test_run_id"
+              ]
+            }
+          ],
+          "cause_entity": "workflow_run",
+          "effect_entity": "incident",
+          "evidence_complete": true,
+          "hypothesis": "A code, configuration, dependency, or test defect blocked CI.",
+          "missing_evidence": [],
+          "rule_id": "workflow_execution_failed",
+          "severity": "high"
+        }
+      ],
+      "signal_name": "workflow_run_completed"
+    },
+    {
+      "accepted": true,
+      "case_id": "OPS-20260610-DISK-PRESSURE",
+      "domain_id": "operational_reliability",
+      "errors": [],
+      "findings": [
+        {
+          "action_proposals": [
+            {
+              "action_id": "preserve_recovery_evidence",
+              "approval_required": false,
+              "description": "Preserve manifests and recovery configuration before cleanup.",
+              "risk_level": "low",
+              "status": "ready_for_governed_execution",
+              "verification_fields": [
+                "manifest_path",
+                "sha256_ref"
+              ]
+            },
+            {
+              "action_id": "remove_approved_disk_residue",
+              "approval_required": true,
+              "description": "Remove only the exact disk residue approved by the human.",
+              "risk_level": "critical",
+              "status": "awaiting_approval",
+              "verification_fields": [
+                "approval_message_id",
+                "space_before",
+                "space_after"
+              ]
+            }
+          ],
+          "cause_entity": "host_volume",
+          "effect_entity": "incident",
+          "evidence_complete": true,
+          "hypothesis": "Accumulated residue or active data exhausted safe disk headroom.",
+          "missing_evidence": [],
+          "rule_id": "disk_capacity_critical",
+          "severity": "critical"
+        }
+      ],
+      "signal_name": "disk_capacity_observed"
+    }
+  ],
+  "summary": {
+    "accepted": 2,
+    "cases": 2,
+    "executed_actions": 0,
+    "findings": 2
+  },
+  "validation": {
+    "domain_id": "operational_reliability",
+    "passed": true,
+    "violation_count": 0,
+    "violations": [],
+    "warning_count": 0,
+    "warnings": []
+  }
+}
