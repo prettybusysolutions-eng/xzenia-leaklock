@@ -12,6 +12,9 @@ def test_offer_has_price_truth_boundary_and_stable_intake():
     assert "does not promise" in content
     assert "prettybusysolutions@gmail.com" in content
     assert "revenue-leak-audit.yml" in content
+    assert "https://buy.stripe.com/7sYbJ0dgk3RVesg88u0kE0j" in content
+    assert "Fit confirmed? Pay $199 securely" in content
+    assert "client_reference_id=" in content
     assert "source=" in content
     assert "trycloudflare.com" not in content
 

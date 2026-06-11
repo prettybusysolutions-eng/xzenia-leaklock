@@ -58,6 +58,7 @@
 
     <div class="actions">
       <a class="button" id="private-intake" href="mailto:prettybusysolutions@gmail.com?subject=Revenue%20Leak%20Evidence%20Audit">Request a private intake</a>
+      <a class="button secondary" id="secure-payment" href="https://buy.stripe.com/7sYbJ0dgk3RVesg88u0kE0j">Fit confirmed? Pay $199 securely</a>
       <a class="button secondary" id="public-intake" href="https://github.com/prettybusysolutions-eng/xzenia-leaklock/issues/new?template=revenue-leak-audit.yml&title=%5BRevenue%20Leak%20Evidence%20Audit%5D%20">Use public GitHub intake</a>
     </div>
 
@@ -92,7 +93,7 @@
     </section>
 
     <div class="truth">
-      The audit identifies and prioritizes evidence. It does not promise that every estimate is recoverable revenue. Payment is requested only after fit and delivery scope are confirmed.
+      The audit identifies and prioritizes evidence. It does not promise that every estimate is recoverable revenue. Use the payment link only after fit and delivery scope are confirmed.
     </div>
 
     <footer>
@@ -113,6 +114,9 @@ Please do not attach sensitive billing data until a secure handoff is arranged.
 
 Attribution: ${attribution}`;
     privateLink.href = `mailto:prettybusysolutions@gmail.com?subject=${encodeURIComponent("Revenue Leak Evidence Audit - " + attribution)}&body=${encodeURIComponent(body)}`;
+    const paymentLink = document.getElementById("secure-payment");
+    const clientReference = `xzenia_${source}_${skill}`.slice(0, 180);
+    paymentLink.href = `https://buy.stripe.com/7sYbJ0dgk3RVesg88u0kE0j?client_reference_id=${encodeURIComponent(clientReference)}`;
     const publicLink = document.getElementById("public-intake");
     publicLink.href += encodeURIComponent(attribution);
   </script>
