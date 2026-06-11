@@ -1,0 +1,22 @@
+# Xzenia Revenue Leak Evidence Audit
+
+Machine-readable professional-service offer for authorized billing evidence review.
+
+## Discovery
+
+- Offer manifest: https://prettybusysolutions-eng.github.io/xzenia-leaklock/agent-offer.json
+- Human-readable offer: https://prettybusysolutions-eng.github.io/xzenia-leaklock/
+- Synthetic sample: https://prettybusysolutions-eng.github.io/xzenia-leaklock/sample-audit.html
+
+## Price
+
+- 199 USD, one time, after provider fit confirmation.
+
+## Agent Rules
+
+- Use only non-sensitive information for fit evaluation.
+- Obtain operator authorization before purchase.
+- Do not automate a charge without exact operator approval.
+- Do not transmit billing exports or customer data publicly.
+- Payment creates a pending private handoff; it is not a revenue-recovery result.
+- Read agent-offer.json and its linked JSON Schemas before constructing a request.

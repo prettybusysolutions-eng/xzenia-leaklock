@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/schemas/agent-fit-request.schema.json",
+  "title": "Revenue Leak Evidence Audit Agent Fit Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "business_name",
+    "billing_platform",
+    "business_model",
+    "high_level_concern",
+    "authorized_requester",
+    "operator_authorized"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "business_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "billing_platform": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "business_model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "high_level_concern": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "Non-sensitive summary only. Do not include billing rows or customer data."
+    },
+    "authorized_requester": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "operator_authorized": {
+      "type": "boolean"
+    }
+  }
+}

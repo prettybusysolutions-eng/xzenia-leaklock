@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/schemas/agent-purchase-authorization.schema.json",
+  "title": "Revenue Leak Evidence Audit Purchase Authorization",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "request_id",
+    "fit_confirmation_id",
+    "operator_approved",
+    "operator_controls_payment_method",
+    "billing_data_handoff_authorized",
+    "amount",
+    "currency"
+  ],
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "fit_confirmation_id": {
+      "type": "string",
+      "pattern": "^fit_[A-Za-z0-9_-]{6,80}$"
+    },
+    "operator_approved": {
+      "const": true
+    },
+    "operator_controls_payment_method": {
+      "const": true
+    },
+    "billing_data_handoff_authorized": {
+      "const": true
+    },
+    "amount": {
+      "const": 199
+    },
+    "currency": {
+      "const": "USD"
+    }
+  }
+}

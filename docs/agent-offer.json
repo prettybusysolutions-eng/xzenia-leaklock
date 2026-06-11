@@ -1,0 +1,106 @@
+{
+  "protocol": "xzenia.agent-commerce",
+  "protocol_version": "1.0",
+  "offer_id": "xzenia.revenue-leak-evidence-audit.usd-199.v1",
+  "status": "active",
+  "name": "Revenue Leak Evidence Audit",
+  "provider": {
+    "name": "Pretty Busy Cleaning LLC",
+    "contact_email": "prettybusysolutions@gmail.com",
+    "country": "US"
+  },
+  "canonical_url": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/",
+  "sample_url": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/sample-audit.html",
+  "price": {
+    "amount": 199,
+    "currency": "USD",
+    "type": "one_time",
+    "price_version": "2026-06-11"
+  },
+  "scope": {
+    "input": "One authorized, sanitized billing export after private handoff is arranged.",
+    "output": [
+      "Evidence-backed leakage findings",
+      "Confidence and severity for each finding",
+      "Prioritized remediation plan",
+      "Separation of observed facts, interpretations, and estimates"
+    ],
+    "excluded": [
+      "Autonomous billing-system changes",
+      "Guaranteed recovery",
+      "Public transmission of billing exports or customer data",
+      "Revenue claims before verified settlement and fulfillment"
+    ]
+  },
+  "fit_check": {
+    "mode": "local_rule_evaluation_then_private_confirmation",
+    "request_schema": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/schemas/agent-fit-request.schema.json",
+    "minimum_conditions": [
+      "The requester represents an identifiable business or project.",
+      "The requester can name a billing platform or structured billing export.",
+      "The requester can state a non-sensitive billing concern.",
+      "An operator is authorized to request the review."
+    ],
+    "result_states": [
+      "insufficient_information",
+      "requires_operator_authorization",
+      "eligible_for_private_fit_review",
+      "fit_confirmed_by_provider",
+      "not_a_fit"
+    ],
+    "confirmation_channel": "mailto:prettybusysolutions@gmail.com"
+  },
+  "purchase": {
+    "payment_method": "stripe_checkout",
+    "checkout_url": "https://buy.stripe.com/7sYbJ0dgk3RVesg88u0kE0j",
+    "authorization_schema": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/schemas/agent-purchase-authorization.schema.json",
+    "required_before_payment": [
+      "fit_confirmed_by_provider",
+      "operator_controls_or_is_authorized_to_use_the_payment_method",
+      "operator_approves_the_exact_199_usd_charge",
+      "requester_is_authorized_to_arrange_private_billing_data_handoff"
+    ],
+    "client_reference_id": {
+      "format": "xzenia_agent_<source>_<request-id>",
+      "maximum_length": 180,
+      "allowed_characters": "A-Z a-z 0-9 _ -"
+    },
+    "automatic_charge_allowed": false
+  },
+  "handoff": {
+    "public_data_allowed": [
+      "Business or project name",
+      "Billing platform",
+      "Business model",
+      "High-level concern",
+      "Agent request ID"
+    ],
+    "public_data_forbidden": [
+      "Billing exports",
+      "Customer records",
+      "Credentials",
+      "Payment-card data",
+      "Private company information"
+    ],
+    "private_handoff_required": true
+  },
+  "fulfillment": {
+    "receipt_schema": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/schemas/agent-receipt.schema.json",
+    "initial_status_after_verified_payment": "pending_private_handoff",
+    "delivery_timing": "Agreed during fit confirmation.",
+    "success_condition": "The agreed evidence report is delivered to the authorized requester."
+  },
+  "machine_instructions": [
+    "Fetch and validate this manifest.",
+    "Evaluate the non-sensitive fit request locally.",
+    "Obtain operator authorization and private provider fit confirmation.",
+    "Construct a Stripe checkout URL with an attributed client_reference_id.",
+    "Do not transmit billing data until a private handoff is arranged.",
+    "Treat payment as pending fulfillment, not as recovered revenue."
+  ],
+  "security": {
+    "x402_payment_enabled": false,
+    "reason": "This professional service requires provider fit confirmation, operator authorization, and private data handoff before payment.",
+    "last_reviewed": "2026-06-11"
+  }
+}
