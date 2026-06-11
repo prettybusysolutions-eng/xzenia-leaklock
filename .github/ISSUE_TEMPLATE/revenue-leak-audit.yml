@@ -1,0 +1,54 @@
+name: Revenue Leak Evidence Audit
+description: Request a public, non-sensitive fit review for the $199 evidence audit.
+title: "[Revenue Leak Evidence Audit] "
+labels:
+  - revenue-audit-lead
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form only for non-sensitive intake. Do not include billing exports,
+        customer records, credentials, payment data, or private company information.
+  - type: input
+    id: company
+    attributes:
+      label: Company or project
+      description: A public company or project name is sufficient.
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: How did you find this audit?
+      options:
+        - ClawHub
+        - GitHub
+        - Referral
+        - Search
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: billing_platform
+    attributes:
+      label: Billing platform
+      description: Examples include Stripe, Chargebee, Salesforce, or CSV exports.
+    validations:
+      required: true
+  - type: textarea
+    id: concern
+    attributes:
+      label: High-level concern
+      description: Describe the symptom without including sensitive records.
+      placeholder: Failed-payment recovery appears lower than expected.
+    validations:
+      required: true
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Data and outcome boundaries
+      options:
+        - label: I have not included sensitive billing or customer data in this public issue.
+          required: true
+        - label: I understand the audit identifies evidence and does not guarantee recovered revenue.
+          required: true
