@@ -58,6 +58,7 @@
 
     <div class="actions">
       <a class="button" id="private-intake" href="mailto:prettybusysolutions@gmail.com?subject=Revenue%20Leak%20Evidence%20Audit">Request a private intake</a>
+      <a class="button secondary" id="sample-audit" href="sample-audit.html">View a sample audit</a>
       <a class="button secondary" id="secure-payment" href="https://buy.stripe.com/7sYbJ0dgk3RVesg88u0kE0j">Fit confirmed? Pay $199 securely</a>
       <a class="button secondary" id="public-intake" href="https://github.com/prettybusysolutions-eng/xzenia-leaklock/issues/new?template=revenue-leak-audit.yml&title=%5BRevenue%20Leak%20Evidence%20Audit%5D%20">Use public GitHub intake</a>
     </div>
@@ -105,6 +106,8 @@
     const source = (params.get("source") || "direct").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
     const skill = (params.get("skill") || "none").replace(/[^a-z0-9_-]/gi, "").slice(0, 60);
     const attribution = `source=${source}; skill=${skill}`;
+    const sampleLink = document.getElementById("sample-audit");
+    sampleLink.href = `sample-audit.html?source=${encodeURIComponent(source)}&skill=${encodeURIComponent(skill)}`;
     const privateLink = document.getElementById("private-intake");
     const body = `Company:
 Platform:

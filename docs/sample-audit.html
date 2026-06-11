@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Synthetic sample of a Revenue Leak Evidence Audit deliverable.">
+  <title>Sample Revenue Leak Evidence Audit</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #08111f;
+      --panel: #101d31;
+      --text: #eef5ff;
+      --muted: #a8b7cb;
+      --accent: #63e6be;
+      --warn: #ffd166;
+      --line: #253854;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at top, #14294a 0, var(--bg) 42%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    main { width: min(980px, calc(100% - 32px)); margin: 0 auto; padding: 52px 0 72px; }
+    a { color: var(--accent); }
+    .eyebrow { color: var(--accent); font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    h1 { margin: 10px 0 12px; font-size: clamp(2.2rem, 7vw, 4.5rem); line-height: 1; }
+    h2 { margin-top: 0; font-size: 1.2rem; }
+    .lede { max-width: 760px; color: var(--muted); font-size: 1.1rem; }
+    .notice, .truth {
+      margin: 24px 0;
+      padding: 18px 22px;
+      border-left: 4px solid var(--warn);
+      background: #1b1b20;
+    }
+    .truth { border-color: var(--accent); background: #0d1a2d; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin: 24px 0; }
+    .card { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: rgba(16,29,49,.9); }
+    .metric { font-size: 2rem; font-weight: 850; }
+    .metric-label, .muted { color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+    th, td { padding: 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: .85rem; text-transform: uppercase; letter-spacing: .06em; }
+    .tag { display: inline-block; padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; font-size: .8rem; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+    .button {
+      display: inline-block;
+      padding: 12px 18px;
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      color: #04120e;
+      background: var(--accent);
+      font-weight: 800;
+      text-decoration: none;
+    }
+    .button.secondary { color: var(--text); background: transparent; border-color: var(--line); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="eyebrow">Demonstration Deliverable</div>
+    <h1>Sample Revenue Leak Evidence Audit</h1>
+    <p class="lede">This one-page example shows how the audit separates source evidence, findings, risk estimates, and recommended action.</p>
+
+    <div class="notice">
+      <strong>Synthetic example only.</strong> Every company name, row, amount, and result below is invented for demonstration. Nothing on this page represents a real customer, verified loss, or recoverable revenue.
+    </div>
+
+    <section class="grid">
+      <article class="card">
+        <div class="metric">1,240</div>
+        <div class="metric-label">Synthetic invoice rows reviewed</div>
+      </article>
+      <article class="card">
+        <div class="metric">3</div>
+        <div class="metric-label">Evidence-backed signal classes</div>
+      </article>
+      <article class="card">
+        <div class="metric">$0</div>
+        <div class="metric-label">Verified recoverable revenue claimed</div>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Input and scope</h2>
+      <p><strong>Example business:</strong> Northstar Software, a fictional subscription company.</p>
+      <p><strong>Authorized input:</strong> A synthetic CSV containing invoice ID, customer ID, due amount, invoice status, retry count, credit note amount, and timestamps.</p>
+      <p><strong>Question:</strong> Which billing events deserve human review before any billing-system change?</p>
+    </section>
+
+    <section class="card">
+      <h2>Prioritized findings</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Finding</th>
+            <th>Observed evidence</th>
+            <th>Interpretation</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Failed invoices with no recorded retry</strong></td>
+            <td>18 synthetic rows remain failed more than 14 days after due date and show retry_count = 0.</td>
+            <td>These rows are candidates for retry-policy review. The export alone does not prove they are collectible.</td>
+            <td><span class="tag">High signal confidence</span></td>
+          </tr>
+          <tr>
+            <td><strong>Credits exceed the related invoice balance</strong></td>
+            <td>4 synthetic rows show credit_note_amount greater than due_amount.</td>
+            <td>These rows merit reconciliation against the source ledger. They may reflect valid adjustments or data-quality defects.</td>
+            <td><span class="tag">High signal confidence</span></td>
+          </tr>
+          <tr>
+            <td><strong>Paid status lacks a payment timestamp</strong></td>
+            <td>7 synthetic rows are marked paid while paid_at is empty.</td>
+            <td>This is an evidence-integrity issue. It is not a revenue-loss claim.</td>
+            <td><span class="tag">Medium signal confidence</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Observed facts</h2>
+        <ul>
+          <li>The listed row conditions exist in the synthetic input.</li>
+          <li>Each finding can be traced to specific synthetic row IDs.</li>
+          <li>No system action was taken.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h2>Not yet proven</h2>
+        <ul>
+          <li>Whether any invoice is collectible</li>
+          <li>Whether any credit is incorrect</li>
+          <li>Whether any amount is recoverable revenue</li>
+        </ul>
+      </article>
+    </section>
+
+    <section class="card">
+      <h2>Recommended action order</h2>
+      <ol>
+        <li>Reconcile the 4 excess-credit candidates against the source ledger.</li>
+        <li>Confirm the intended retry policy, then review the 18 no-retry candidates.</li>
+        <li>Repair or explain the 7 missing payment timestamps before using that field for reporting.</li>
+        <li>Measure outcomes only after authorized remediation and verified settlement.</li>
+      </ol>
+    </section>
+
+    <div class="truth">
+      The real audit uses authorized customer data and delivers an evidence register with traceable findings. It does not promise recovery, make autonomous billing changes, or count an estimate as revenue.
+    </div>
+
+    <div class="actions">
+      <a class="button" id="private-intake" href="mailto:prettybusysolutions@gmail.com?subject=Revenue%20Leak%20Evidence%20Audit">Request a private fit review</a>
+      <a class="button secondary" id="offer-page" href="./">Return to offer</a>
+    </div>
+  </main>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const source = (params.get("source") || "sample").replace(/[^a-z0-9_-]/gi, "").slice(0, 40);
+    const skill = (params.get("skill") || "none").replace(/[^a-z0-9_-]/gi, "").slice(0, 60);
+    const attribution = `source=${source}; skill=${skill}`;
+    const privateLink = document.getElementById("private-intake");
+    privateLink.href = `mailto:prettybusysolutions@gmail.com?subject=${encodeURIComponent("Revenue Leak Evidence Audit - " + attribution)}`;
+    document.getElementById("offer-page").href = `./?source=${encodeURIComponent(source)}&skill=${encodeURIComponent(skill)}`;
+  </script>
+</body>
+</html>
