@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/schemas/agent-receipt.schema.json",
+  "title": "Revenue Leak Evidence Audit Fulfillment Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "offer_id",
+    "request_id",
+    "payment_status",
+    "fulfillment_status",
+    "amount",
+    "currency",
+    "updated_at"
+  ],
+  "properties": {
+    "offer_id": {
+      "const": "xzenia.revenue-leak-evidence-audit.usd-199.v1"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "payment_status": {
+      "enum": [
+        "unpaid",
+        "paid",
+        "refunded"
+      ]
+    },
+    "fulfillment_status": {
+      "enum": [
+        "awaiting_fit_confirmation",
+        "pending_payment",
+        "pending_private_handoff",
+        "in_review",
+        "delivered",
+        "cancelled"
+      ]
+    },
+    "amount": {
+      "const": 199
+    },
+    "currency": {
+      "const": "USD"
+    },
+    "deliverable_uri": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}
