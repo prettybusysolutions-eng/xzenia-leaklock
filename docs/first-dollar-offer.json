@@ -1,0 +1,65 @@
+{
+  "protocol": "xzenia.agent-commerce",
+  "protocol_version": "1.0",
+  "offer_id": "xzenia.airlock.first-dollar.usd-1.v1",
+  "status": "active",
+  "name": "Xzenia Airlock First-Dollar Proof Packet",
+  "provider": {
+    "name": "Pretty Busy Cleaning LLC",
+    "contact_email": "prettybusysolutions@gmail.com",
+    "country": "US"
+  },
+  "canonical_url": "https://prettybusysolutions-eng.github.io/xzenia-leaklock/first-dollar.html",
+  "price": {
+    "amount": 1,
+    "currency": "USD",
+    "type": "one_time",
+    "price_version": "2026-07-01",
+    "stripe_payment_link_id": "plink_1ToVPSAc6hzX3Jk1vG2FMHiv",
+    "stripe_price_id": "price_1ToVPSAc6hzX3Jk1sgfWBZz8"
+  },
+  "purchase": {
+    "payment_method": "stripe_checkout",
+    "checkout_url": "https://buy.stripe.com/00wbJ05NSagjfwk88u0kE0k",
+    "automatic_charge_allowed": false,
+    "operator_authorization_required": true,
+    "client_reference_id": {
+      "format": "xzenia_first_dollar_<source>_<buyer-or-request-id>",
+      "maximum_length": 180,
+      "allowed_characters": "A-Z a-z 0-9 _ -"
+    }
+  },
+  "scope": {
+    "input_required": "None.",
+    "output": [
+      "Public Xzenia Airlock proof-packet page",
+      "Machine-readable offer manifest",
+      "Links to the related sample revenue-audit artifact",
+      "Truth boundaries for current commercialization evidence"
+    ],
+    "excluded": [
+      "Private consulting",
+      "Sensitive data review",
+      "Recovered-revenue guarantee",
+      "Dashboard, CRM, payment, or wallet access"
+    ]
+  },
+  "fulfillment": {
+    "mode": "self_serve_public_artifact",
+    "initial_status_after_verified_payment": "delivered_public_artifact",
+    "success_condition": "Buyer can access the public proof packet and Stripe reports a paid checkout session."
+  },
+  "machine_instructions": [
+    "Fetch and validate this manifest.",
+    "Do not send sensitive data.",
+    "Obtain operator authorization before checkout.",
+    "Use the checkout URL only for a one-time 1 USD purchase.",
+    "Treat revenue as verified only after Stripe reports payment_status=paid."
+  ],
+  "truth_boundary": {
+    "not_a_recovered_revenue_claim": true,
+    "not_a_paid_pilot_claim": true,
+    "not_a_security_certification": true,
+    "purpose": "Create a clean, no-upfront, provider-observed first-dollar path for the Xzenia Airlock proof packet."
+  }
+}

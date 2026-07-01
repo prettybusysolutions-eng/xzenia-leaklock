@@ -7,10 +7,13 @@ Machine-readable professional-service offer for authorized billing evidence revi
 - Offer manifest: https://prettybusysolutions-eng.github.io/xzenia-leaklock/agent-offer.json
 - Human-readable offer: https://prettybusysolutions-eng.github.io/xzenia-leaklock/
 - Synthetic sample: https://prettybusysolutions-eng.github.io/xzenia-leaklock/sample-audit.html
+- One-dollar Airlock proof packet: https://prettybusysolutions-eng.github.io/xzenia-leaklock/first-dollar.html
+- One-dollar machine-readable offer: https://prettybusysolutions-eng.github.io/xzenia-leaklock/first-dollar-offer.json
 
 ## Price
 
 - 199 USD, one time, after provider fit confirmation.
+- 1 USD, one time, for the public Xzenia Airlock proof packet.
 
 ## Agent Rules
 
