@@ -147,6 +147,7 @@ def stripe_webhook():
 
     try:
         event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        event = event.to_dict(recursive=True)
     except stripe.error.SignatureVerificationError:
         print('[STRIPE] Invalid signature — rejecting event')
         return 'Invalid signature', 400
@@ -166,8 +167,8 @@ def stripe_webhook():
         error_msg = str(e)
         print(f'[STRIPE] Event processing failed: {error_msg}')
         _enqueue_dlq(stripe_event_id, event_type, event, error_msg)
-        # Still return 200 to prevent Stripe retry spam for known failure types
-        return 'ok', 200
+        # Preserve provider retries even when the database/DLQ is unavailable.
+        return 'Webhook processing unavailable', 503
 
 
 def _handle_stripe_event(event):
@@ -177,13 +178,15 @@ def _handle_stripe_event(event):
     metadata = session_data.get('metadata', {})
     scan_id = metadata.get('scan_id')
     ptype = metadata.get('type', 'recovery_fee')
-    customer_email = session_data.get('customer_details', {}).get('email', '') or \
+    customer_email = (session_data.get('customer_details') or {}).get('email', '') or \
                      session_data.get('customer_email', '')
     amount_cents = session_data.get('amount_total', 0)
 
     print(f'[STRIPE] Processing: type={event_type}, scan_id={scan_id}, email={customer_email}')
 
-    if event_type == 'checkout.session.completed':
+    if event_type in ('checkout.session.completed', 'checkout.session.async_payment_succeeded'):
+        if session_data.get('payment_status') != 'paid':
+            return
         # Log payment to DB (ON CONFLICT ensures idempotency)
         pool = get_pool()
         conn = pool.getconn()
@@ -206,6 +209,9 @@ def _handle_stripe_event(event):
             ))
             conn.commit()
             print(f'[STRIPE] Payment recorded: session={session_data.get("id")}')
+        except Exception:
+            conn.rollback()
+            raise
         finally:
             pool.putconn(conn)
 

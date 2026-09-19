@@ -41,6 +41,9 @@ def create_app():
     
     # Register blueprints
     from routes import page_bp, api_bp, checkout_bp, webhooks_bp
+    from routes.webhooks import stripe_webhook
+    # Stripe authenticates the raw body with its signature, not a browser token.
+    csrf.exempt(stripe_webhook)
     app.register_blueprint(page_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(checkout_bp)

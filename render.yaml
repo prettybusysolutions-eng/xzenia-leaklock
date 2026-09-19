@@ -4,7 +4,7 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements-lock.txt
     startCommand: gunicorn "app:create_app()"
     healthCheckPath: /health
     envVars:
@@ -22,7 +22,8 @@ services:
       - key: FLASK_SECRET_KEY
         generateValue: true
       - key: TOKEN_ENCRYPTION_KEY
-        generateValue: true
+        # Supply a Fernet.generate_key() value, not an arbitrary random string.
+        sync: false
       # SMTP — uncomment and fill in with your email provider (Resend, SendGrid, etc.)
       # - key: SMTP_HOST
       #   sync: false
