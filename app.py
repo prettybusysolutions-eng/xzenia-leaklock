@@ -95,7 +95,17 @@ def create_app():
                 with conn.cursor() as cursor:
                     cursor.execute('SELECT 1')
                     cursor.fetchone()
+                    for query in (
+                        'SELECT stripe_session_id, scan_id, amount_cents FROM saas_payments LIMIT 0',
+                        'SELECT stripe_event_id, payload, status FROM webhook_dead_letter_queue LIMIT 0',
+                        'SELECT cache_key, payload, expires_at FROM scan_cache LIMIT 0',
+                        'SELECT key_hash, is_active FROM api_keys LIMIT 0',
+                        'SELECT id FROM saas_consequence_cases LIMIT 0',
+                        'SELECT id FROM saas_consequence_actions LIMIT 0',
+                    ):
+                        cursor.execute(query)
             finally:
+                conn.rollback()
                 pool.putconn(conn)
         except Exception:
             return {

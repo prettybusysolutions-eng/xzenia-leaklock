@@ -23,6 +23,7 @@ def pg(monkeypatch):
     pool = ThreadedConnectionPool(1, 10, url, options=f'-csearch_path={schema}')
     monkeypatch.setattr(database, 'get_pool', lambda: pool)
     monkeypatch.setattr(hooks, 'get_pool', lambda: pool)
+    monkeypatch.setattr('routes.api.get_pool', lambda: pool)
     database.init_payments_table()
     database.init_webhook_dlq_table()
     yield pool
@@ -70,3 +71,19 @@ def test_failure_rollback_dlq_resolution_and_reuse(pg):
     finally:
         conn.rollback()
         pg.putconn(conn)
+
+
+def test_missing_payment_schema_fails_readiness(pg):
+    from app import create_app
+    client = create_app().test_client()
+    assert client.get('/health').status_code == 200
+    conn = pg.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DROP TABLE saas_payments')
+        conn.commit()
+    finally:
+        pg.putconn(conn)
+    assert client.get('/health').status_code == 503
+    database.init_payments_table()
+    assert client.get('/health').status_code == 200

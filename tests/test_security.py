@@ -32,6 +32,9 @@ class _Connection:
     def cursor(self):
         return _Cursor(self.fail)
 
+    def rollback(self):
+        pass
+
 
 class _Pool:
     def __init__(self, fail=False):
