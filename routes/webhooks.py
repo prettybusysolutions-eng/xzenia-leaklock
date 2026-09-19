@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from config import STRIPE_WEBHOOK_SECRET, LEAKLOCK_DOMAIN
 from models.db import get_pool
+from scan_access import create_scan_access_token
 
 webhooks_bp = Blueprint('webhooks', __name__, url_prefix='/webhook')
 
@@ -77,7 +78,8 @@ def _send_payment_confirmation_email(to_email: str, scan_id: str, ptype: str, am
     }
     product_name = product_names.get(ptype, 'LeakLock')
     
-    results_url = f"{LEAKLOCK_DOMAIN}/results/{scan_id}"
+    access_token = create_scan_access_token(scan_id) if scan_id else ''
+    results_url = f"{LEAKLOCK_DOMAIN}/results/{scan_id}?access_token={access_token}"
     msg = MIMEMultipart('alternative')
     msg['Subject'] = f'Payment Confirmed — {product_name}'
     msg['From'] = from_email
@@ -218,12 +220,12 @@ def _handle_stripe_event(event):
 def retry_dlq():
     """
     Retry pending webhook DLQ events. Admin only.
-    Protected by FLASK_ADMIN_KEY env var.
+    Protected by LEAKLOCK_ADMIN_KEY env var.
     Usage: POST /webhook/stripe/retry-dlq with header X-Admin-Key
     """
     from config import STRIPE_SECRET_KEY
     import os
-    admin_key = os.environ.get('FLASK_ADMIN_KEY', '')
+    admin_key = os.environ.get('LEAKLOCK_ADMIN_KEY', '')
     provided_key = request.headers.get('X-Admin-Key', '')
     
     if not admin_key or provided_key != admin_key:
@@ -285,7 +287,7 @@ def retry_dlq():
 def dlq_status():
     """Get DLQ status. Admin only."""
     import os
-    admin_key = os.environ.get('FLASK_ADMIN_KEY', '')
+    admin_key = os.environ.get('LEAKLOCK_ADMIN_KEY', '')
     provided_key = request.headers.get('X-Admin-Key', '')
     if not admin_key or provided_key != admin_key:
         return 'Unauthorized', 401

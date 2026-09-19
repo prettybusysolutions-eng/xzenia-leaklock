@@ -5,9 +5,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Flask
-SECRET_KEY = os.environ.get('FLASK_SECRET_KEY', 'leaklock-dev-key-change-in-prod-2026')
+_DEV_SECRET_KEY = 'leaklock-dev-key-change-in-prod-2026'
+SECRET_KEY = os.environ.get('FLASK_SECRET_KEY', _DEV_SECRET_KEY)
+LEAKLOCK_ENV = os.environ.get('LEAKLOCK_ENV', 'development').strip().lower()
+if LEAKLOCK_ENV == 'production' and (not SECRET_KEY or SECRET_KEY == _DEV_SECRET_KEY):
+    raise RuntimeError('FLASK_SECRET_KEY must be configured in production')
 HOST = '0.0.0.0'
 PORT = int(os.environ.get('PORT', 5050))
+SCAN_ACCESS_MAX_AGE = int(os.environ.get('SCAN_ACCESS_MAX_AGE', str(7 * 24 * 60 * 60)))
 
 # File limits
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB

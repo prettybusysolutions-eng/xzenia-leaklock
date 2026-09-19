@@ -76,9 +76,30 @@ def create_app():
     except Exception as e:
         print(f'[WARN] API keys table init failed: {e}')
     
-    # Health check route
+    # Liveness proves the process can answer. Readiness proves required
+    # dependencies are available.
+    @app.route('/live')
+    def live():
+        return {'status': 'ok', 'service': 'leaklock'}, 200
+
     @app.route('/health')
     def health():
-        return 'OK'
+        try:
+            from models.db import get_pool as current_get_pool
+            pool = current_get_pool()
+            conn = pool.getconn()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute('SELECT 1')
+                    cursor.fetchone()
+            finally:
+                pool.putconn(conn)
+        except Exception:
+            return {
+                'status': 'unavailable',
+                'service': 'leaklock',
+                'database': 'unavailable',
+            }, 503
+        return {'status': 'ok', 'service': 'leaklock', 'database': 'ok'}, 200
     
     return app

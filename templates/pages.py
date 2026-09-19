@@ -402,7 +402,7 @@ def page_landing():
     <div style="display:flex;flex-direction:column;gap:2px;max-width:720px;">
       <details class="faq-item">
         <summary>Is my billing data safe?</summary>
-        <div class="faq-body">Yes. Your CSV is processed in memory and deleted immediately after the scan completes. We never store your raw billing data. Results (pattern findings only) are retained for up to 30 days so you can return to them.</div>
+        <div class="faq-body">Your CSV is processed in memory and raw upload bytes are not intentionally persisted. Derived pattern findings may be stored in the configured database. Confirm the deployment's retention and deletion policy before uploading sensitive data.</div>
       </details>
       <details class="faq-item">
         <summary>What file formats do you accept?</summary>
@@ -589,7 +589,7 @@ def page_upload(error=None):
   <div>
     <div class="upload-form-card">
       <h1 class="upload-title">Upload Your Billing Data</h1>
-      <p class="upload-sub">We scan for 15 revenue leak patterns. Your data is deleted immediately after scanning.</p>
+      <p class="upload-sub">We scan for supported revenue leak patterns. Raw upload bytes are processed in memory; derived findings may be retained.</p>
       {error_html}
       <form method="POST" enctype="multipart/form-data" id="upload-form">
         <input type="hidden" name="csrf_token" value="{_csrf()}">
@@ -613,7 +613,7 @@ def page_upload(error=None):
         </button>
         <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-top:14px;font-size:12px;color:var(--text-3);">
           <span>&#128274; SSL Encrypted</span>
-          <span>&#128465; CSV deleted immediately after scan</span>
+          <span>&#128465; Raw upload bytes are not intentionally persisted</span>
           <span>&#9989; No card required</span>
         </div>
       </form>
@@ -740,7 +740,7 @@ form.addEventListener('submit', function(e) {{
 </html>"""
 
 
-def page_results(scan):
+def page_results(scan, access_token=''):
     leaks = scan.get('leaks', [])
     total_revenue = scan.get('total_revenue', 0)
     total_leakage = scan.get('total_leakage', 0)
@@ -939,8 +939,7 @@ def page_results(scan):
 
   <div class="scan-again-bar">
     <a href="/upload" class="btn-ghost" style="font-size:13px;padding:9px 18px;">&#8593; Scan Another File</a>
-    <a href="/scan/stripe-direct" class="btn-ghost" style="font-size:13px;padding:9px 18px;">💳 Re-scan Stripe</a>
-    <a href="/report/{scan_id}" class="btn-ghost" style="font-size:13px;padding:9px 18px;">&#128196; Download PDF</a>
+    <a href="/report/{scan_id}?access_token={access_token}" class="btn-ghost" style="font-size:13px;padding:9px 18px;">&#128196; Download PDF</a>
   </div>
 
   <div class="leaks-section-title">
@@ -959,13 +958,13 @@ def page_results(scan):
         <div class="fee">10%</div>
         <div class="tier-name">Self-Serve Recovery</div>
         <div class="tier-desc">Get the full playbook. Fix it yourself with step-by-step guidance. Keep 90% of everything recovered.</div>
-        <a href="/checkout/self-serve?scan_id={scan_id}" class="btn-primary" style="margin-top:16px;width:100%;justify-content:center;">Get the Playbook</a>
+        <a href="/checkout/self-serve?scan_id={scan_id}&access_token={access_token}" class="btn-primary" style="margin-top:16px;width:100%;justify-content:center;">Get the Playbook</a>
       </div>
       <div class="recovery-option">
         <div class="fee">20%</div>
         <div class="tier-name">Done-With-You</div>
         <div class="tier-desc">Our team walks you through every fix. We handle the hard parts. Keep 80% of everything recovered.</div>
-        <a href="/checkout/done-with-you?scan_id={scan_id}" class="btn-primary" style="margin-top:16px;width:100%;justify-content:center;background:var(--accent);">Work With Us</a>
+        <a href="/checkout/done-with-you?scan_id={scan_id}&access_token={access_token}" class="btn-primary" style="margin-top:16px;width:100%;justify-content:center;background:var(--accent);">Work With Us</a>
       </div>
     </div>
 
@@ -974,6 +973,7 @@ def page_results(scan):
     <form method="POST" action="/api/save-results">
       <input type="hidden" name="csrf_token" value="{_csrf()}">
       <input type="hidden" name="scan_id" value="{scan_id}">
+      <input type="hidden" name="access_token" value="{access_token}">
       <div class="email-inline">
         <span style="font-size:13px;color:var(--text-3);white-space:nowrap;">&#128233; Email results</span>
         <input type="email" name="email" placeholder="you@practice.com" required>
@@ -1197,7 +1197,7 @@ def page_pricing():
         <span class="faq-chevron">&#8964;</span>
       </div>
       <div class="faq-answer">
-        Yes. Your CSV file is analyzed in memory and deleted immediately after the scan completes. We never store raw billing data. Scan results are retained for up to 30 days so you can access your report. All traffic is SSL encrypted.
+        Your CSV file is analyzed in memory and raw upload bytes are not intentionally persisted. Derived scan findings may be stored in the configured database. Retention and deletion depend on the operator's deployment policy.
       </div>
     </div>
     <div class="faq-item">
@@ -1422,7 +1422,7 @@ def page_dental():
 </html>"""
 
 
-def page_payment_success(ptype='recovery', scan_id=''):
+def page_payment_success(ptype='recovery', scan_id='', access_token=''):
     msg_map = {
         'guardian': "You're now protected with LeakLock Guardian. Monthly scans will start immediately.",
         'starter': "Welcome to LeakLock Starter! Your recovery guide is ready.",
@@ -1433,7 +1433,7 @@ def page_payment_success(ptype='recovery', scan_id=''):
     }
     msg = msg_map.get(ptype, "Payment received! Thank you.")
 
-    back_link = f'<a href="/results/{scan_id}" class="btn-ghost" style="margin-top:16px;">&#8592; Back to Scan Results</a>' if scan_id else '<a href="/" class="btn-ghost" style="margin-top:16px;">&#8592; Back to Home</a>'
+    back_link = f'<a href="/results/{scan_id}?access_token={access_token}" class="btn-ghost" style="margin-top:16px;">&#8592; Back to Scan Results</a>' if scan_id else '<a href="/" class="btn-ghost" style="margin-top:16px;">&#8592; Back to Home</a>'
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1570,7 +1570,7 @@ def page_privacy():
   <h2>Data Retention</h2>
   <ul>
     <li><strong>CSV data:</strong> Deleted immediately after scan.</li>
-    <li><strong>Scan results:</strong> Retained up to 30 days, then permanently deleted.</li>
+    <li><strong>Scan results:</strong> Derived findings may be retained in the configured database. Ask the deployment operator for the active retention and deletion policy.</li>
     <li><strong>Emails:</strong> Retained until you request deletion.</li>
   </ul>
 
@@ -1632,7 +1632,7 @@ def page_terms():
   </ul>
 
   <h2>4. Your Data</h2>
-  <p>You retain full ownership of your billing data. You grant LeakLock a limited license to process it for the purpose of providing scan results. CSV data is deleted immediately after scanning.</p>
+  <p>You retain full ownership of your billing data. You grant LeakLock a limited license to process it for the purpose of providing scan results. Raw upload bytes are not intentionally persisted; derived findings may be retained according to the deployment policy.</p>
 
   <h2>5. No Warranty</h2>
   <p>The service is provided &ldquo;as is&rdquo; without warranty of any kind, express or implied, including fitness for a particular purpose or merchantability.</p>
@@ -1856,7 +1856,7 @@ body {{
 </div>
 
 <div class="report-footer">
-  LeakLock &#169; 2026 &#8212; Revenue Leak Detection. Your data is deleted after scanning. Estimates are indicative, not guaranteed.
+  LeakLock &#169; 2026 &#8212; Revenue Leak Detection. Raw upload bytes are not intentionally persisted; derived findings may be retained. Estimates are indicative, not guaranteed.
   Scan ID: {scan_id_short}
   &bull; <a href="/privacy" style="color:#475569;">Privacy</a>
   &bull; <a href="/terms" style="color:#475569;">Terms</a>
