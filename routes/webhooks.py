@@ -65,7 +65,7 @@ def _record_webhook_processed(stripe_event_id: str, event_type: str):
             pool.putconn(conn)
 
 
-def _send_payment_confirmation_email(to_email: str, scan_id: str, ptype: str, amount_cents: int):
+def _send_payment_confirmation_email(to_email: str, scan_id: str, ptype: str, amount_cents: int, notification_id=None):
     """Send a payment confirmation email with results link."""
     import os
     smtp_host = os.environ.get('SMTP_HOST', '')
@@ -95,6 +95,9 @@ def _send_payment_confirmation_email(to_email: str, scan_id: str, ptype: str, am
     msg['Subject'] = f'Payment Confirmed — {product_name}'
     msg['From'] = from_email
     msg['To'] = to_email
+    if notification_id:
+        import hashlib
+        msg['Message-ID'] = f'<{hashlib.sha256(notification_id.encode()).hexdigest()}@leaklock.io>'
     
     text_body = f"""Payment confirmed.
 
@@ -130,7 +133,7 @@ View your results: {results_url}
     msg.attach(MIMEText(html_body, 'html'))
     
     try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:
             server.starttls()
             server.login(smtp_user, smtp_pass)
             server.sendmail(from_email, [to_email], msg.as_string())
@@ -218,6 +221,9 @@ def _handle_stripe_event(event):
                 customer_email,
                 amount_cents
             ))
+            if customer_email and '@' in customer_email:
+                from services.payment_notifications import enqueue
+                enqueue(cur, session_data['id'], customer_email, scan_id, ptype, amount_cents)
             conn.commit()
             print(f'[STRIPE] Payment recorded: session={session_data.get("id")}')
         except Exception:
@@ -225,10 +231,6 @@ def _handle_stripe_event(event):
             raise
         finally:
             pool.putconn(conn)
-
-        # Send confirmation email
-        if customer_email and '@' in customer_email:
-            _send_payment_confirmation_email(customer_email, scan_id or '', ptype, amount_cents)
 
 
 # ── Webhook DLQ Admin Routes ──────────────────────────────────────────────────

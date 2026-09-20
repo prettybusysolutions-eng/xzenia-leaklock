@@ -24,8 +24,11 @@ def pg(monkeypatch):
     monkeypatch.setattr(database, 'get_pool', lambda: pool)
     monkeypatch.setattr(hooks, 'get_pool', lambda: pool)
     monkeypatch.setattr('routes.api.get_pool', lambda: pool)
+    monkeypatch.setattr('services.payment_notifications.get_pool', lambda: pool)
     database.init_payments_table()
     database.init_webhook_dlq_table()
+    from services.payment_notifications import init_outbox
+    init_outbox()
     yield pool
     pool.closeall()
     with admin.cursor() as cur:
@@ -37,6 +40,57 @@ def event():
     return {'id': 'evt_release', 'type': 'checkout.session.completed', 'data': {'object': {
         'id': 'cs_release', 'payment_status': 'paid', 'amount_total': 1000,
         'customer_details': None, 'metadata': {'scan_id': str(uuid.UUID(int=1))}}}}
+
+
+def test_notification_is_atomic_deduplicated_and_retryable(pg):
+    from services.payment_notifications import deliver_one
+    payment = event()
+    payment['data']['object']['customer_details'] = {'email': 'synthetic@example.invalid'}
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        list(executor.map(lambda _: hooks._handle_stripe_event(payment), range(8)))
+    assert deliver_one(send=lambda *a, **k: False) == 'retry'
+    assert deliver_one(send=lambda *a, **k: True) == 'idle'
+    conn = pg.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT COUNT(*), MAX(attempts) FROM payment_notification_outbox')
+            assert cur.fetchone() == (1, 1)
+            cur.execute('UPDATE payment_notification_outbox SET available_at=NOW()')
+        conn.commit()
+    finally:
+        pg.putconn(conn)
+    delivered = []
+    def send(*args, **kwargs):
+        delivered.append(kwargs['notification_id'])
+        return True
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        states = list(executor.map(lambda _: deliver_one(send=send), range(4)))
+    assert states.count('sent') == 1
+    assert delivered == ['cs_release']
+    hooks._handle_stripe_event(payment)
+    assert deliver_one(send=send) == 'idle'
+
+
+def test_outbox_failure_rolls_back_payment(pg):
+    payment = event()
+    payment['data']['object']['customer_details'] = {'email': 'synthetic@example.invalid'}
+    conn = pg.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('DROP TABLE payment_notification_outbox')
+        conn.commit()
+    finally:
+        pg.putconn(conn)
+    with pytest.raises(psycopg2.Error):
+        hooks._handle_stripe_event(payment)
+    conn = pg.getconn()
+    try:
+        with conn.cursor() as cur:
+            cur.execute('SELECT COUNT(*) FROM saas_payments')
+            assert cur.fetchone() == (0,)
+    finally:
+        conn.rollback()
+        pg.putconn(conn)
 
 
 def test_concurrent_duplicate_payment_and_schema_rerun(pg):
