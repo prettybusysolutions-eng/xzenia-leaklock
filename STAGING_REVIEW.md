@@ -2,7 +2,7 @@
 
 Status: release gate OPEN. This is an author-side engineering review, not independent third-party certification or proof of a production release.
 
-Reviewed published PR #16 final candidate head `497b5b0f69d01f1092334e5cb25c063f837d76da`.
+Reviewed published PR #16 final candidate head `d0327b116ee4e344d652ba287e64bb6eb83094e6`.
 
 ## Findings corrected
 
@@ -27,7 +27,7 @@ Additional fixes: DLQ helpers now roll back and release connections after failur
 
 Remaining review concerns: payment notification delivery is not transactional or deduplicated; rate limiting uses per-process memory; readiness does not verify every legacy integration column. These require resolution or explicit release acceptance with evidence, not a green-CI assumption.
 
-Infrastructure discovery: no Render/Stripe/database configuration variables were present. The repository's candidate `https://leaklock.onrender.com/health` returned HTTP 404. A new Neon connection was confirmed by the application; no Neon database has been provisioned or tested by this review.
+Infrastructure discovery: no Render/Stripe configuration variables were present. The repository's candidate `https://leaklock.onrender.com/health` returned HTTP 404. The isolated Neon project `prettybusy-release-staging` also has a separate `leaklock-staging` branch. Direct connections from this sandbox were blocked by its network allowlist, and the final Neon SQL review was rejected by the platform usage limit, so database contents were not claimed as verified.
 
 Before release: deploy this exact candidate to isolated staging with valid secrets; rehearse schema upgrade and rollback on sanitized PostgreSQL data; test upload, scoped result/report access and real Stripe test-mode checkout; deliver paid, unpaid, duplicate and delayed-success events; interrupt persistence and confirm provider retry recovery; restart and reconcile payment records; verify TLS, domain callbacks and notification behavior. Record candidate SHA and sanitized provider event IDs.
 
