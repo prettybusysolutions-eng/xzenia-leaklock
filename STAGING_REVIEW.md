@@ -2,7 +2,7 @@
 
 Status: release gate OPEN. This is an author-side engineering review, not independent third-party certification or proof of a production release.
 
-Reviewed published PR #16 head `357a0e29a6dc83cedfafc71c60d33694a2da1dbb` and prepared the accompanying follow-up changes.
+Reviewed published PR #16 final candidate head `497b5b0f69d01f1092334e5cb25c063f837d76da`.
 
 ## Findings corrected
 
@@ -15,7 +15,7 @@ Reviewed published PR #16 head `357a0e29a6dc83cedfafc71c60d33694a2da1dbb` and pr
 
 ## Evidence
 
-Local `.venv/bin/python -m pytest -q`: **48 passed**. `pip check`: no broken requirements. New checks use actual Stripe SDK verification of locally generated HMAC signatures, with CSRF enabled, and verify rejection of invalid signatures, retryable processing failure, retained administrative CSRF and no database access for unpaid checkout.
+Local `.venv/bin/python -m pytest -q`: **49 passed, 6 skipped**. `pip check` is clean. GitHub's PostgreSQL 16 plus Redis service-container workflow passed, including concurrent notification deduplication, rollback and shared-worker rate-limit checks. New checks use actual Stripe SDK verification of locally generated HMAC signatures, with CSRF enabled, but no live Stripe test-mode checkout.
 
 The signatures and checkout objects are synthetic. New PostgreSQL 16 service-container checks exercise real concurrent duplicate payment writes, schema-initializer reruns, rollback after invalid writes, and DLQ resolution. Initial PostgreSQL runs passed at `9b8f80f8b51a413f7d61494d791688559fe1aa90`; the accompanying follow-up adds missing-schema readiness and recovery checks. Local PostgreSQL checks skip explicitly when their database URL is absent. No Stripe test-mode checkout or deployed end-to-end purchase was completed.
 
