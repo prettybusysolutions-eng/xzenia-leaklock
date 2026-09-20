@@ -2,7 +2,7 @@ name: Deploy to Render
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -17,10 +17,10 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-lock.txt
 
       - name: Run tests
-        run: pip install pytest && pytest -q || true
+        run: pytest -q
 
       - name: Deploy to Render
         uses: render-docs/github-action@v1

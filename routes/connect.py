@@ -191,7 +191,7 @@ def oauth_callback(platform):
         result['is_synthetic'] = False
 
         try:
-            cache_set(result['scan_id'], result)
+            cache_set(f"scan_{result['scan_id']}", result)
         except Exception:
             pass
         try:
@@ -208,7 +208,9 @@ def oauth_callback(platform):
         except Exception:
             pass
 
-        return redirect(f'/results/{result["scan_id"]}')
+        from scan_access import create_scan_access_token
+        access_token = create_scan_access_token(result['scan_id'])
+        return redirect(f'/results/{result["scan_id"]}?access_token={access_token}')
     except Exception as e:
         logger.error(f'Scan after connect failed: {e}')
         import traceback

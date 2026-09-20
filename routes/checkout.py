@@ -6,6 +6,7 @@ from config import STRIPE_SECRET_KEY, LEAKLOCK_DOMAIN
 from templates import page_payment_success
 from services.stripe_client import create_checkout_session
 from services.cache import cache_get
+from scan_access import require_scan_access
 
 checkout_bp = Blueprint('checkout', __name__, url_prefix='/checkout')
 
@@ -13,6 +14,7 @@ stripe.api_key = STRIPE_SECRET_KEY
 
 
 @checkout_bp.route('/recovery/<scan_id>')
+@require_scan_access
 def checkout_recovery(scan_id):
     """Create Stripe checkout for recovery fee."""
     if not stripe.api_key:
@@ -58,6 +60,8 @@ def checkout_recovery(scan_id):
     
     fee = max(fee_min, int(total_leakage * fee_pct))
     
+    access_token = request.args.get('access_token', '')
+
     try:
         session = create_checkout_session(
             line_items=[{
@@ -72,8 +76,8 @@ def checkout_recovery(scan_id):
                 'quantity': 1,
             }],
             mode='payment',
-            success_url=f"{LEAKLOCK_DOMAIN}/payment/success?scan_id={scan_id}&session_id={{CHECKOUT_SESSION_ID}}",
-            cancel_url=f"{LEAKLOCK_DOMAIN}/results/{scan_id}",
+            success_url=f"{LEAKLOCK_DOMAIN}/payment/success?scan_id={scan_id}&access_token={access_token}&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{LEAKLOCK_DOMAIN}/results/{scan_id}?access_token={access_token}",
             metadata={'scan_id': scan_id, 'type': 'recovery_fee', 'tier': tier}
         )
         return redirect(session.url, code=303)
@@ -88,7 +92,8 @@ def checkout_self_serve():
     scan_id = request.args.get('scan_id', '').strip()
     if not scan_id:
         return '<h1>No scan specified</h1>', 400
-    return redirect(f'/checkout/recovery/{scan_id}?tier=self', code=302)
+    access_token = request.args.get('access_token', '')
+    return redirect(f'/checkout/recovery/{scan_id}?tier=self&access_token={access_token}', code=302)
 
 
 @checkout_bp.route('/done-with-you')
@@ -97,7 +102,8 @@ def checkout_done_with_you():
     scan_id = request.args.get('scan_id', '').strip()
     if not scan_id:
         return '<h1>No scan specified</h1>', 400
-    return redirect(f'/checkout/recovery/{scan_id}?tier=done', code=302)
+    access_token = request.args.get('access_token', '')
+    return redirect(f'/checkout/recovery/{scan_id}?tier=done&access_token={access_token}', code=302)
 
 
 @checkout_bp.route('/guardian')

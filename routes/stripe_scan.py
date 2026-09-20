@@ -14,6 +14,8 @@ import uuid
 from flask import Blueprint, redirect, jsonify, request, Response
 
 from services.consequence import ingest_scan_result_to_consequence_cases
+from routes.api import _require_api_key
+from scan_access import create_scan_access_token
 
 logger = logging.getLogger(__name__)
 stripe_scan_bp = Blueprint('stripe_scan', __name__, url_prefix='/scan')
@@ -124,7 +126,7 @@ def _run_scan(days_back: int = 365):
     }
 
     try:
-        cache_set(scan_id, scan)
+        cache_set(f"scan_{scan_id}", scan)
     except Exception as e:
         logger.warning('Cache set failed: %s', e)
 
@@ -147,6 +149,7 @@ def _run_scan(days_back: int = 365):
 
 
 @stripe_scan_bp.route('/stripe-direct', methods=['GET'])
+@_require_api_key
 def stripe_direct_loading():
     """Show a loading page that immediately JS-redirects to the actual scan."""
     days = request.args.get('days', '365')
@@ -190,6 +193,7 @@ p{{color:#94a3b8;font-size:15px}}
 
 
 @stripe_scan_bp.route('/stripe-direct/run', methods=['GET'])
+@_require_api_key
 def stripe_direct_run():
     """Execute scan and redirect to results page."""
     days_back = int(request.args.get('days', 365))
@@ -201,10 +205,12 @@ def stripe_direct_run():
     if err:
         return f'<h1>Scan failed</h1><p>{err}</p><p><a href="/upload">Try uploading a file</a></p>', 500
 
-    return redirect(f"/results/{scan['scan_id']}")
+    access_token = create_scan_access_token(scan['scan_id'])
+    return redirect(f"/results/{scan['scan_id']}?access_token={access_token}")
 
 
 @stripe_scan_bp.route('/stripe-direct/json', methods=['GET'])
+@_require_api_key
 def stripe_direct_json():
     """Return raw JSON report."""
     days_back = int(request.args.get('days', 365))

@@ -2,11 +2,13 @@
 import os
 import sys
 import json
+import hashlib
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import create_app
+import routes.api as api_routes
 from models.db import add_consequence_action, record_action_decision, record_action_outcome
 from services.consequence import (
     build_revenue_recovery_evidence,
@@ -16,6 +18,18 @@ from services.consequence import (
     validate_revenue_recovery_evidence,
 )
 from services.github_consequence import build_operational_proof
+
+API_KEY = 'system6-test-key'
+API_HEADERS = {'X-API-Key': API_KEY}
+
+
+def _authorize_api(monkeypatch):
+    monkeypatch.setattr(
+        api_routes,
+        '_API_KEYS',
+        {hashlib.sha256(API_KEY.encode()).hexdigest(): 'system6-tests'},
+    )
+    monkeypatch.setattr(api_routes, '_api_keys_loaded', True)
 
 
 def _example_scan(scan_id='scan-123'):
@@ -222,6 +236,7 @@ def test_add_consequence_action_dedupes_existing_open_action(monkeypatch):
 
 
 def test_app_boots_and_proof_report_route_works(monkeypatch):
+    _authorize_api(monkeypatch)
     monkeypatch.setattr(
         'routes.api.get_proof_report',
         lambda domain: {
@@ -249,7 +264,7 @@ def test_app_boots_and_proof_report_route_works(monkeypatch):
     app = create_app()
     app.config['WTF_CSRF_ENABLED'] = False
     client = app.test_client()
-    response = client.get('/api/system6/proof/revenue-recovery')
+    response = client.get('/api/system6/proof/revenue-recovery', headers=API_HEADERS)
 
     assert response.status_code == 200
     data = response.get_json()
@@ -257,13 +272,14 @@ def test_app_boots_and_proof_report_route_works(monkeypatch):
     assert data['cases']['real_cases'] == 1
     assert data['cases']['synthetic_cases'] == 2
 
-    page = client.get('/ops/system6/proof/revenue-recovery')
+    page = client.get('/ops/system6/proof/revenue-recovery', headers=API_HEADERS)
     assert page.status_code == 200
     assert b'System 6 Proof' in page.data
     assert b'Action lifecycle' in page.data
 
 
 def test_approval_route_records_human_decision(monkeypatch):
+    _authorize_api(monkeypatch)
     monkeypatch.setattr(
         'routes.api.record_action_decision',
         lambda action_id, approval_status, approved_by=None, decision_notes=None, actor=None, actor_id=None, actor_type=None: {
@@ -291,6 +307,7 @@ def test_approval_route_records_human_decision(monkeypatch):
             },
             'notes': 'Approved after manual evidence review.',
         },
+        headers=API_HEADERS,
     )
 
     assert response.status_code == 200
@@ -302,6 +319,7 @@ def test_approval_route_records_human_decision(monkeypatch):
 
 
 def test_execution_route_records_execution_status(monkeypatch):
+    _authorize_api(monkeypatch)
     monkeypatch.setattr(
         'routes.api.record_action_execution',
         lambda action_id, execution_status, execution_notes=None, execution_actor=None, actor=None, actor_id=None, actor_type=None, verification=None: {
@@ -331,6 +349,7 @@ def test_execution_route_records_execution_status(monkeypatch):
                 'path': 'crm.timeline',
             },
         },
+        headers=API_HEADERS,
     )
 
     assert response.status_code == 200
@@ -343,6 +362,7 @@ def test_execution_route_records_execution_status(monkeypatch):
 
 
 def test_outcome_route_records_measured_outcome(monkeypatch):
+    _authorize_api(monkeypatch)
     monkeypatch.setattr(
         'routes.api.record_action_outcome',
         lambda action_id, outcome_type, outcome_value=None, outcome_notes=None, outcome_currency='USD', actor=None, actor_id=None, actor_type=None, outcome_evidence=None, verification=None: {
@@ -380,6 +400,7 @@ def test_outcome_route_records_measured_outcome(monkeypatch):
                 'path': 'stripe.payment_event',
             },
         },
+        headers=API_HEADERS,
     )
 
     assert response.status_code == 200
@@ -392,6 +413,7 @@ def test_outcome_route_records_measured_outcome(monkeypatch):
 
 
 def test_approval_route_rejects_missing_structured_actor(monkeypatch):
+    _authorize_api(monkeypatch)
     monkeypatch.setattr(
         'routes.api.record_action_decision',
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError('structured actor is required: provide actor{actor_id, actor_type} or actor_id + actor_type')),
@@ -406,6 +428,7 @@ def test_approval_route_rejects_missing_structured_actor(monkeypatch):
             'approval_status': 'approved',
             'notes': 'No actor supplied.',
         },
+        headers=API_HEADERS,
     )
 
     assert response.status_code == 400
@@ -415,6 +438,7 @@ def test_approval_route_rejects_missing_structured_actor(monkeypatch):
 
 
 def test_outcome_route_requires_evidence_reference(monkeypatch):
+    _authorize_api(monkeypatch)
     monkeypatch.setattr(
         'routes.api.record_action_outcome',
         lambda *args, **kwargs: (_ for _ in ()).throw(ValueError('outcome_evidence must contain at least one evidence reference')),
@@ -432,6 +456,7 @@ def test_outcome_route_requires_evidence_reference(monkeypatch):
             'actor_type': 'operations_user',
             'outcome_evidence': [],
         },
+        headers=API_HEADERS,
     )
 
     assert response.status_code == 400
