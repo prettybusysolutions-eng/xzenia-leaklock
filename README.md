@@ -4,6 +4,10 @@ Forensic visibility for structured data handling.
 
 LeakLock is designed for teams that need to know who touched what, when, and where exposure began — without ambiguity and without manual reconstruction.
 
+**Start here:** [run the credential-free evaluation path](QUICKSTART.md).
+
+Release status and gates: [RELEASING.md](RELEASING.md).
+
 ## Use case
 High-trust environments do not tolerate blind spots around sensitive exports.
 
