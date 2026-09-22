@@ -20,7 +20,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run tests
-        run: pip install pytest && pytest -q || true
+        run: python -m pip install pytest && python -m pytest -q
 
       - name: Deploy to Render
         uses: render-docs/github-action@v1
