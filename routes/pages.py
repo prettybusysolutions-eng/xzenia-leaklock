@@ -1,6 +1,8 @@
 """Routes package - page routes for LeakLock."""
 from flask import Blueprint, redirect, request
 
+from scan_access import require_scan_access
+
 page_bp = Blueprint('pages', __name__)
 
 
@@ -67,12 +69,13 @@ def upload():
 
 
 @page_bp.route('/results/<scan_id>')
+@require_scan_access
 def results(scan_id):
     from templates import page_results
     scan = get_scan_by_id(scan_id)
     if not scan:
         return '<h1>Scan not found. Results may have expired — please <a href="/upload">scan again</a>.</h1>', 404
-    return page_results(scan)
+    return page_results(scan, request.args.get('access_token', ''))
 
 
 @page_bp.route('/pricing')
@@ -110,7 +113,8 @@ def payment_success():
     from templates import page_payment_success
     ptype = request.args.get('type', 'recovery')
     scan_id = request.args.get('scan_id', '')
-    return page_payment_success(ptype, scan_id)
+    access_token = request.args.get('access_token', '')
+    return page_payment_success(ptype, scan_id, access_token)
 
 
 @page_bp.route('/dashboard/<customer_id>')

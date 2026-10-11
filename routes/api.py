@@ -17,6 +17,7 @@ from models.db import (
     record_action_execution,
     record_action_outcome,
 )
+from scan_access import create_scan_access_token, require_scan_access
 
 api_bp = Blueprint('api', __name__, url_prefix='')
 
@@ -52,10 +53,10 @@ def _require_api_key(f):
     """Decorator: require valid X-API-Key header. Checks against PostgreSQL api_keys table."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        _load_api_keys()
         provided = request.headers.get('X-API-Key', '')
         if not provided:
             return jsonify({'error': 'missing_api_key', 'message': 'X-API-Key header required'}), 401
+        _load_api_keys()
         key_hash = hashlib.sha256(provided.encode()).hexdigest()
         if key_hash not in _API_KEYS:
             return jsonify({'error': 'invalid_api_key', 'message': 'Invalid or inactive API key'}), 401
@@ -127,6 +128,8 @@ def admin_create_key():
         row = cur.fetchone()
         conn.commit()
         pool.putconn(conn)
+        global _api_keys_loaded
+        _api_keys_loaded = False
         return jsonify({
             'api_key': raw_key,
             'id': row[0],
@@ -330,7 +333,8 @@ def demo_scan():
     except Exception as e:
         print(f'[WARN] Demo scan cache set failed: {e}')
 
-    return redirect(f"/results/{result['scan_id']}")
+    access_token = create_scan_access_token(result['scan_id'])
+    return redirect(f"/results/{result['scan_id']}?access_token={access_token}")
 
 
 @api_bp.route('/sample')
@@ -360,8 +364,8 @@ def _extract_verification(payload):
     return verification
 
 
-@_require_api_key
 @api_bp.route('/api/system6/actions/<action_id>')
+@_require_api_key
 def system6_get_action(action_id):
     """Return one action lifecycle record."""
     action = get_consequence_action(action_id)
@@ -369,16 +373,13 @@ def system6_get_action(action_id):
         return jsonify({'error': 'action_not_found'}), 404
     return jsonify(action)
 
-@_require_api_key
-
 @api_bp.route('/api/system6/cases/<case_id>/actions')
+@_require_api_key
 def system6_get_case_actions(case_id):
     """Return all lifecycle actions for a case."""
     return jsonify({'case_id': case_id, 'actions': get_case_actions(case_id)})
-@_require_api_key
-
-
 @api_bp.route('/api/system6/actions/<action_id>/decision', methods=['POST'])
+@_require_api_key
 def system6_action_decision(action_id):
     """Approve or reject a pending consequence action with bound actor metadata."""
     payload = _json_required_payload()
@@ -402,8 +403,8 @@ def system6_action_decision(action_id):
     return jsonify({'ok': True, 'action': action})
 
 
-@_require_api_key
 @api_bp.route('/api/system6/actions/<action_id>/execution', methods=['POST'])
+@_require_api_key
 def system6_action_execution(action_id):
     """Record execution state for an approved consequence action."""
     payload = _json_required_payload()
@@ -429,8 +430,8 @@ def system6_action_execution(action_id):
     return jsonify({'ok': True, 'action': action})
 
 
-@_require_api_key
 @api_bp.route('/api/system6/actions/<action_id>/outcome', methods=['POST'])
+@_require_api_key
 def system6_action_outcome(action_id):
     """Record measured outcome for an executed consequence action."""
     payload = _json_required_payload()
@@ -461,8 +462,8 @@ def system6_action_outcome(action_id):
     return jsonify({'ok': True, 'action': action})
 
 
-@_require_api_key
 @api_bp.route('/api/system6/proof/revenue-recovery')
+@_require_api_key
 def system6_proof_revenue_recovery():
     """Operator proof report for System 6 / revenue recovery.
 
@@ -473,6 +474,7 @@ def system6_proof_revenue_recovery():
 
 
 @api_bp.route('/ops/system6/proof/revenue-recovery')
+@_require_api_key
 def system6_proof_revenue_recovery_page():
     """Simple operator-facing proof page for System 6."""
     report = get_proof_report('revenue_recovery')
@@ -584,6 +586,7 @@ a{{color:#38bdf8}}
 
 
 @api_bp.route('/report/<scan_id>')
+@require_scan_access
 def report(scan_id):
     """Printable PDF report."""
     scan = get_scan_by_id(scan_id)
@@ -592,8 +595,8 @@ def report(scan_id):
     return page_report(scan)
 
 
-@_require_api_key
 @api_bp.route('/api/save-results', methods=['POST'])
+@require_scan_access
 def save_results():
     """Save scan results + capture email via POST form."""
     from models.db import capture_email as db_capture_email
@@ -609,11 +612,13 @@ def save_results():
             db_capture_email(scan_id, email)
         except Exception as e:
             print(f'[WARN] save-results email capture failed: {e}')
-        return f'<div style="background:#dcfce7;padding:16px;border-radius:8px;text-align:center;">&#x2705; <strong>Saved!</strong> Report sent to {email}. <a href="/report/{scan_id}" target="_blank" style="color:#059669;font-weight:600;">View PDF &rarr;</a></div>'
+        access_token = request.form.get('access_token', '')
+        return f'<div style="background:#dcfce7;padding:16px;border-radius:8px;text-align:center;">&#x2705; <strong>Saved!</strong> Report access retained for {email}. <a href="/report/{scan_id}?access_token={access_token}" target="_blank" style="color:#059669;font-weight:600;">View PDF &rarr;</a></div>'
     return '<div style="background:#fee2e2;padding:16px;border-radius:8px;text-align:center;">&#x274C; Invalid email address</div>'
 
 
 @api_bp.route('/capture_email/<scan_id>', methods=['POST'])
+@require_scan_access
 def capture_email(scan_id):
     """Capture email for scan results."""
     from models.db import capture_email as db_capture_email
@@ -624,7 +629,8 @@ def capture_email(scan_id):
             db_capture_email(scan_id, email)
         except Exception as e:
             print(f'[WARN] Email capture failed: {e}')
-        return f'<div style="background:#dcfce7;padding:16px;border-radius:8px;text-align:center;">&#x2705; <strong>Email captured!</strong> Your report has been sent to {email}. <a href="/report/{scan_id}" target="_blank" style="color:#059669;font-weight:600;">View PDF Report &rarr;</a></div>'
+        access_token = request.form.get('access_token', '')
+        return f'<div style="background:#dcfce7;padding:16px;border-radius:8px;text-align:center;">&#x2705; <strong>Email captured!</strong> Report access retained for {email}. <a href="/report/{scan_id}?access_token={access_token}" target="_blank" style="color:#059669;font-weight:600;">View PDF Report &rarr;</a></div>'
     return '<div style="background:#fee2e2;padding:16px;border-radius:8px;text-align:center;">&#x274C; Invalid email address</div>'
 
 
@@ -709,7 +715,7 @@ def handle_upload():
     
     # Save to cache
     try:
-        cache_set(result['scan_id'], result)
+        cache_set(f"scan_{result['scan_id']}", result)
     except Exception as e:
         print(f'[WARN] Cache set failed: {e}')
     
@@ -742,4 +748,5 @@ def handle_upload():
         except Exception as e:
             print(f'[WARN] Email capture failed: {e}')
     
-    return redirect(f'/results/{result["scan_id"]}')
+    access_token = create_scan_access_token(result['scan_id'])
+    return redirect(f'/results/{result["scan_id"]}?access_token={access_token}')

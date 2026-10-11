@@ -4,11 +4,15 @@ services:
     env: python
     region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements-lock.txt
     startCommand: gunicorn "app:create_app()"
     healthCheckPath: /health
     envVars:
+      - key: LEAKLOCK_ENV
+        value: production
       - key: DATABASE_URL
+        sync: false
+      - key: LEAKLOCK_REDIS_URL
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
@@ -20,7 +24,8 @@ services:
       - key: FLASK_SECRET_KEY
         generateValue: true
       - key: TOKEN_ENCRYPTION_KEY
-        generateValue: true
+        # Supply a Fernet.generate_key() value, not an arbitrary random string.
+        sync: false
       # SMTP — uncomment and fill in with your email provider (Resend, SendGrid, etc.)
       # - key: SMTP_HOST
       #   sync: false
@@ -32,6 +37,33 @@ services:
       #   sync: false
       # - key: SMTP_FROM
       #   sync: false
+
+  - type: worker
+    name: leaklock-payment-notifications
+    env: python
+    region: oregon
+    plan: starter
+    buildCommand: pip install -r requirements-lock.txt
+    startCommand: python -m services.payment_notifications
+    envVars:
+      - key: LEAKLOCK_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
+      - key: LEAKLOCK_DOMAIN
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: '587'
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
 
 databases:
   - name: leaklock-db

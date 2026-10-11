@@ -135,11 +135,7 @@ def get_pool():
     if _pool is None:
         _pool = psycopg2.pool.SimpleConnectionPool(
             1, 10,
-            host=DB_CONFIG['host'],
-            dbname=DB_CONFIG['dbname'],
-            user=DB_CONFIG['user'],
-            password=DB_CONFIG['password'],
-            port=DB_CONFIG['port'],
+            **DB_CONFIG,
         )
     return _pool
 
@@ -156,13 +152,7 @@ def return_connection(conn):
 
 def get_db():
     """Get a raw psycopg2 connection (for legacy code that doesn't use pool)."""
-    return psycopg2.connect(
-        host=DB_CONFIG['host'],
-        dbname=DB_CONFIG['dbname'],
-        user=DB_CONFIG['user'],
-        password=DB_CONFIG['password'],
-        port=DB_CONFIG['port'],
-    )
+    return psycopg2.connect(**DB_CONFIG)
 
 
 def get_customer_with_token(customer_id, token):
